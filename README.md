@@ -1,10 +1,10 @@
-# Cidade Conectada 
+# Zelar.app
 > "Conectando pessoas, dados e cidades."
 
 Plataforma digital acadêmica para registro, gestão e análise de problemas urbanos, desenvolvida com foco em **Qualidade de Software**.
 
 ## O Projeto
-O Cidade Conectada atua como uma ponte entre a população e a administração urbana. Os cidadãos podem registrar problemas de infraestrutura (buracos, iluminação, lixo, etc.) via geolocalização, enquanto a administração pública gerencia o ciclo de vida dessas ocorrências através de um painel inteligente.
+O Zelar.app atua como uma ponte entre a população e a administração urbana. Os cidadãos podem registrar problemas de infraestrutura (buracos, iluminação, lixo, etc.) via geolocalização, enquanto a administração pública gerencia o ciclo de vida dessas ocorrências através de um painel inteligente.
 
 ## Stack Tecnológica (MVP)
 * **Backend:** Java 17+ com Spring Boot (REST API)
