@@ -1,26 +1,66 @@
-# Zelar.app
+# Zelar.app — Backend
+
 > "Conectando pessoas, dados e cidades."
 
-Plataforma digital acadêmica para registro, gestão e análise de problemas urbanos, desenvolvida com foco em **Qualidade de Software**.
+Backend da plataforma **Zelar.app**, responsável pelas regras de negócio, autenticação, gerenciamento de ocorrências e disponibilização da API REST.
 
 ## O Projeto
-O Zelar.app atua como uma ponte entre a população e a administração urbana. Os cidadãos podem registrar problemas de infraestrutura (buracos, iluminação, lixo, etc.) via geolocalização, enquanto a administração pública gerencia o ciclo de vida dessas ocorrências através de um painel inteligente.
+
+O Zelar.app é uma plataforma que conecta cidadãos e responsáveis pela infraestrutura urbana, permitindo o registro, acompanhamento e gerenciamento de ocorrências como:
+
+* Buracos em vias;
+* Problemas de iluminação;
+* Acúmulo de lixo;
+* Alagamentos;
+* Problemas em calçadas;
+* Sinalização danificada;
+* Ocorrências ambientais.
+
+O backend é responsável pelo processamento das informações, controle de usuários, gerenciamento das ocorrências e integração com o banco de dados.
 
 ## Stack Tecnológica (MVP)
-* **Backend:** Java 17+ com Spring Boot (REST API)
+
+* **Backend:** Java 17+ com Spring Boot
 * **Banco de Dados:** PostgreSQL
-* **Segurança:** Autenticação e Autorização via JWT (JSON Web Token)
-* **Frontend:** React / Angular / Vue *(A definir)*
-* **Infraestrutura futura:** Docker e CI/CD
+* **Segurança:** JWT (JSON Web Token)
+* **Ferramentas futuras:** Docker e CI/CD
 
 ## Arquitetura e Padrões
-* **Arquitetura:** MVC com separação em camadas (Controller, Service, Repository, Entity).
-* **Segurança Aplicada:** Senhas com hash criptográfico (BCrypt), sanitização de inputs (Anti-Injection) e validação estrita de rotas.
-* **Git Flow Acadêmico:**
-  * `main`: Produção (Estável)
-  * `stage`: Homologação e QA (Garantia de Qualidade)
-  * `develop`: Integração Contínua
-  * `feature/*`: Desenvolvimento de tarefas isoladas
 
-## Como Executar (Em breve)
-As instruções para rodar a API localmente e configurar as variáveis de ambiente do PostgreSQL serão adicionadas aqui futuramente.
+* Arquitetura em camadas:
+
+  * Controller
+  * Service
+  * Repository
+  * Entity
+
+* API REST seguindo boas práticas.
+
+* Separação de responsabilidades para facilitar manutenção e escalabilidade.
+
+## Estratégia de Branches
+
+```text
+main      → versão estável
+stage     → homologação e QA
+develop   → integração
+
+feature/* → novas funcionalidades
+fix/*     → correções
+```
+
+## Qualidade de Software
+
+O projeto busca seguir práticas de qualidade desde o início:
+
+* Controle de versão com Git;
+* Desenvolvimento em branches;
+* Pull Requests;
+* Revisão de código;
+* Padronização do código;
+* Testes automatizados;
+* Documentação contínua.
+
+## Como Executar
+
+As instruções de configuração do ambiente, banco de dados e execução local serão adicionadas conforme o desenvolvimento do projeto.
