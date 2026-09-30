@@ -30,4 +30,42 @@ public class Usuario {
 
     protected Usuario() {
     }
+
+    public Usuario(
+            String nome,
+            String email,
+            String senha,
+            PerfilUsuario perfil
+    ) {
+        this.nome = nome;
+        this.email = email;
+        this.senha = senha;
+        this.perfil = perfil;
+        this.criadoEm = LocalDateTime.now();
+    }
+
+    public Long getId() {
+        return id;
+    }
+
+    public String getNome() {
+        return nome;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public String getSenha() {
+        return senha;
+    }
+
+    public PerfilUsuario getPerfil() {
+        return perfil;
+    }
+
+    public LocalDateTime getCriadoEm() {
+        return criadoEm;
+    }
+
 }
