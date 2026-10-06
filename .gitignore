@@ -28,6 +28,8 @@ replay_pid*
 *.iws
 *.iml
 *.ipr
+*.env
+.env
 
 ### Maven ###
 target/
