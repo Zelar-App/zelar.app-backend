@@ -19,7 +19,7 @@ public class UsuarioController {
         this.usuarioService = usuarioService;
     }
 
-    @PostMapping("/criar")
+    @PostMapping
     public ResponseEntity<UsuarioResponse> criar(
             @Valid @RequestBody CriarUsuarioRequest request
     ) {
