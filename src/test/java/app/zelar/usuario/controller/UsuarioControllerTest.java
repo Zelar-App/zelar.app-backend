@@ -14,6 +14,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import static org.hamcrest.Matchers.containsString;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
@@ -64,7 +65,6 @@ class UsuarioControllerTest {
     }
     @Test
     void deveRetornar400QuandoDadosForemInvalidos() throws Exception {
-
         CriarUsuarioRequest request = new CriarUsuarioRequest(
                 "",
                 "email-invalido",
@@ -74,7 +74,30 @@ class UsuarioControllerTest {
         mockMvc.perform(post("/api/v1/usuarios")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.erro").value("Bad Request"))
+                .andExpect(jsonPath("$.mensagem", containsString("nome:")))
+                .andExpect(jsonPath("$.mensagem", containsString("email:")))
+                .andExpect(jsonPath("$.mensagem", containsString("senha:")))
+                .andExpect(jsonPath("$.caminho").value("/api/v1/usuarios"))
+                .andExpect(jsonPath("$.timestamp").isNotEmpty());
+    }
+
+    @Test
+    void deveRetornar400QuandoJsonEstiverMalformado() throws Exception {
+        mockMvc.perform(post("/api/v1/usuarios")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.mensagem").value(
+                        "Corpo da requisição ausente ou inválido. Envie um JSON válido."
+                ))
+                .andExpect(jsonPath("$.caminho").value("/api/v1/usuarios"))
+                .andExpect(jsonPath("$.timestamp").isNotEmpty());
     }
     @Test
     void deveRetornar409QuandoEmailJaEstiverCadastrado() throws Exception {
