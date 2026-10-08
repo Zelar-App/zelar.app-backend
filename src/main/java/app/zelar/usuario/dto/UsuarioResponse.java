@@ -2,11 +2,11 @@ package app.zelar.usuario.dto;
 
 import app.zelar.usuario.entity.PerfilUsuario;
 import app.zelar.usuario.entity.Usuario;
-
+import java.util.UUID;
 import java.time.LocalDateTime;
 
 public record UsuarioResponse(
-        Long id,
+        UUID id,
         String nome,
         String email,
         PerfilUsuario perfil,
