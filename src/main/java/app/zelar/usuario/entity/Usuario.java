@@ -1,7 +1,7 @@
 package app.zelar.usuario.entity;
 
 import jakarta.persistence.*;
-
+import java.util.UUID;
 import java.time.LocalDateTime;
 
 @Entity
@@ -9,8 +9,8 @@ import java.time.LocalDateTime;
 public class Usuario {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
 
     @Column(nullable = false, length = 100)
     private String nome;
@@ -44,7 +44,7 @@ public class Usuario {
         this.criadoEm = LocalDateTime.now();
     }
 
-    public Long getId() {
+    public UUID getId() {
         return id;
     }
 
