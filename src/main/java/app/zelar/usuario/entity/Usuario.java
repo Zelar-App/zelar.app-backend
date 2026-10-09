@@ -1,11 +1,19 @@
 package app.zelar.usuario.entity;
 
-import jakarta.persistence.*;
-import java.util.UUID;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Entity
-@Table(name = "usuarios")
+@Table(name = "usuario")
 public class Usuario {
 
     @Id
@@ -18,14 +26,17 @@ public class Usuario {
     @Column(nullable = false, unique = true, length = 150)
     private String email;
 
-    @Column(nullable = false)
+    @Column(name = "senha_hash", nullable = false, length = 255)
     private String senha;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
+    @Column(name = "papel", nullable = false, length = 20)
     private PerfilUsuario perfil;
 
-    @Column(nullable = false, updatable = false)
+    @Column(length = 20)
+    private String telefone;
+
+    @Column(name = "data_cadastro", nullable = false, updatable = false)
     private LocalDateTime criadoEm;
 
     protected Usuario() {
@@ -35,12 +46,14 @@ public class Usuario {
             String nome,
             String email,
             String senha,
-            PerfilUsuario perfil
+            PerfilUsuario perfil,
+            String telefone
     ) {
         this.nome = nome;
         this.email = email;
         this.senha = senha;
         this.perfil = perfil;
+        this.telefone = telefone;
         this.criadoEm = LocalDateTime.now();
     }
 
@@ -64,8 +77,11 @@ public class Usuario {
         return perfil;
     }
 
+    public String getTelefone() {
+        return telefone;
+    }
+
     public LocalDateTime getCriadoEm() {
         return criadoEm;
     }
-
 }

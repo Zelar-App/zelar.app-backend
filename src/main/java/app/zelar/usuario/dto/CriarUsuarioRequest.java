@@ -17,7 +17,10 @@ public record CriarUsuarioRequest(
 
         @NotBlank(message = "A senha é obrigatória")
         @Size(min = 8, max = 72, message = "A senha deve possuir entre 8 e 72 caracteres")
-        String senha
+        String senha,
+
+        @Size(max = 20, message = "O telefone deve possuir no máximo 20 caracteres")
+        String telefone
 
 ) {
 }

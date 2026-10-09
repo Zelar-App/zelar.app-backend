@@ -41,7 +41,8 @@ public class UsuarioService {
                 request.nome().trim(),
                 emailNormalizado,
                 senhaCriptografada,
-                PerfilUsuario.CIDADAO
+                PerfilUsuario.CIDADAO,
+                request.telefone()
         );
 
         return usuarioRepository.save(usuario);

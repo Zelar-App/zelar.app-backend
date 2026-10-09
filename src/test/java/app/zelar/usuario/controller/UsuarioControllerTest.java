@@ -39,14 +39,16 @@ class UsuarioControllerTest {
         CriarUsuarioRequest request = new CriarUsuarioRequest(
                 "João Silva",
                 "joao@email.com",
-                "Senha123"
+                "Senha123",
+                null
         );
 
         Usuario usuario = new Usuario(
                 "João Silva",
                 "joao@email.com",
                 "senha-criptografada",
-                PerfilUsuario.CIDADAO
+                PerfilUsuario.CIDADAO,
+                null
         );
 
         when(usuarioService.criar(any(CriarUsuarioRequest.class)))
@@ -68,7 +70,8 @@ class UsuarioControllerTest {
         CriarUsuarioRequest request = new CriarUsuarioRequest(
                 "",
                 "email-invalido",
-                "123"
+                "123",
+                null
         );
 
         mockMvc.perform(post("/api/v1/usuarios")
@@ -82,7 +85,8 @@ class UsuarioControllerTest {
         CriarUsuarioRequest request = new CriarUsuarioRequest(
                 "João Silva",
                 "joao@email.com",
-                "Senha123"
+                "Senha123",
+                null
         );
 
         when(usuarioService.criar(any(CriarUsuarioRequest.class)))
@@ -95,5 +99,48 @@ class UsuarioControllerTest {
                 .andExpect(jsonPath("$.status").value(409))
                 .andExpect(jsonPath("$.mensagem").value("E-mail já cadastrado"))
                 .andExpect(jsonPath("$.caminho").value("/api/v1/usuarios"));
+    }
+    @Test
+    void deveRetornarTelefoneQuandoInformado() throws Exception {
+        CriarUsuarioRequest request = new CriarUsuarioRequest(
+                "João Silva",
+                "joao@email.com",
+                "Senha123",
+                "31999999999"
+        );
+
+        Usuario usuario = new Usuario(
+                "João Silva",
+                "joao@email.com",
+                "senha-criptografada",
+                PerfilUsuario.CIDADAO,
+                "31999999999"
+        );
+
+        when(usuarioService.criar(any(CriarUsuarioRequest.class)))
+                .thenReturn(usuario);
+
+        mockMvc.perform(post("/api/v1/usuarios")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.telefone").value("31999999999"))
+                .andExpect(jsonPath("$.senha").doesNotExist());
+    }
+    @Test
+    void deveRetornar400QuandoTelefoneExcederLimite() throws Exception {
+        CriarUsuarioRequest request = new CriarUsuarioRequest(
+                "João Silva",
+                "joao@email.com",
+                "Senha123",
+                "1".repeat(21)
+        );
+
+        mockMvc.perform(post("/api/v1/usuarios")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+
+        org.mockito.Mockito.verifyNoInteractions(usuarioService);
     }
 }
