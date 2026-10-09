@@ -10,6 +10,7 @@ public record UsuarioResponse(
         String nome,
         String email,
         PerfilUsuario perfil,
+        String telefone,
         LocalDateTime criadoEm
 ) {
 
@@ -19,6 +20,7 @@ public record UsuarioResponse(
                 usuario.getNome(),
                 usuario.getEmail(),
                 usuario.getPerfil(),
+                usuario.getTelefone(),
                 usuario.getCriadoEm()
         );
     }

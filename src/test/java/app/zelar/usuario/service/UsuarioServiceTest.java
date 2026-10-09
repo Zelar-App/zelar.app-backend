@@ -41,7 +41,8 @@ class UsuarioServiceTest {
         CriarUsuarioRequest request = new CriarUsuarioRequest(
                 "João Silva",
                 "joao@email.com",
-                "Senha123"
+                "Senha123",
+                null
         );
 
         when(usuarioRepository.existsByEmail("joao@email.com"))
@@ -61,6 +62,7 @@ class UsuarioServiceTest {
         assertEquals("senha-criptografada", usuario.getSenha());
         assertEquals(PerfilUsuario.CIDADAO, usuario.getPerfil());
         assertNotNull(usuario.getCriadoEm());
+        assertNull(usuario.getTelefone());
 
         verify(usuarioRepository).save(any(Usuario.class));
     }
@@ -70,7 +72,8 @@ class UsuarioServiceTest {
         CriarUsuarioRequest request = new CriarUsuarioRequest(
                 "João Silva",
                 "  JOAO@EMAIL.COM  ",
-                "Senha123"
+                "Senha123",
+                null
         );
 
         when(usuarioRepository.existsByEmail("joao@email.com"))
@@ -95,7 +98,8 @@ class UsuarioServiceTest {
         CriarUsuarioRequest request = new CriarUsuarioRequest(
                 "João Silva",
                 "joao@email.com",
-                "Senha123"
+                "Senha123",
+                null
         );
 
         when(usuarioRepository.existsByEmail("joao@email.com"))
@@ -120,7 +124,8 @@ class UsuarioServiceTest {
         CriarUsuarioRequest request = new CriarUsuarioRequest(
                 "João Silva",
                 "joao@email.com",
-                "Senha123"
+                "Senha123",
+                null
         );
 
         when(usuarioRepository.existsByEmail("joao@email.com"))
@@ -136,6 +141,30 @@ class UsuarioServiceTest {
 
         verify(passwordEncoder, never())
                 .encode(anyString());
+    }
+    @Test
+    void deveSalvarTelefoneQuandoInformado() {
+        CriarUsuarioRequest request = new CriarUsuarioRequest(
+                "João Silva",
+                "joao@email.com",
+                "Senha123",
+                "31999999999"
+        );
+
+        when(usuarioRepository.existsByEmail("joao@email.com"))
+                .thenReturn(false);
+
+        when(passwordEncoder.encode("Senha123"))
+                .thenReturn("senha-criptografada");
+
+        when(usuarioRepository.save(any(Usuario.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Usuario usuario = usuarioService.criar(request);
+
+        assertEquals("31999999999", usuario.getTelefone());
+
+        verify(usuarioRepository).save(usuario);
     }
 }
 
