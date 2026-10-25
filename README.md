@@ -62,3 +62,23 @@ As respostas de erro seguem `ApiError`: 400 para entrada inválida, 401 para aut
 ## Integração contínua
 
 O GitHub Actions executa `clean verify` com Java 21 e o build da imagem Docker em PRs e pushes para `develop`, `stage` e `main`.
+
+## Criação de ocorrências
+
+`POST /api/v1/ocorrencias` exige `Authorization: Bearer <accessToken>` e um corpo JSON:
+
+```json
+{
+  "categoria": "BURACO",
+  "descricao": "Buraco na via próximo à praça",
+  "latitude": -12.97,
+  "longitude": -38.50,
+  "enderecoAproximado": "Praça central"
+}
+```
+
+Categorias aceitas: `BURACO`, `ILUMINACAO`, `LIXO`, `ALAGAMENTO`, `CALCADA`, `SINALIZACAO` e `AMBIENTAL`. Categoria e descrição são obrigatórias; latitude deve estar entre -90 e 90 e longitude entre -180 e 180. Endereço é opcional, com até 255 caracteres.
+
+A resposta é `201 Created`, com UUID, `usuarioId`, os dados da ocorrência, status `ENVIADA`, prioridade nula e data de criação. O autor é obtido do token; enviar `usuarioId`, `status` ou `prioridade` no corpo não altera esses valores controlados pelo servidor. A resposta não inclui nome, email, telefone ou senha do autor. Se o usuário do token não existir mais, a API retorna 401 sem persistir a ocorrência.
+
+Para conferir o fluxo com PostgreSQL, use um banco de validação separado, configure as variáveis acima e inicie a aplicação. Confirme a aplicação das migrations e a inicialização com `ddl-auto=validate`; cadastre um cidadão, faça login e crie ocorrências das sete categorias. Verifique 400 para coordenadas inválidas e 401 sem token, além da persistência após reiniciar a aplicação. Não execute limpeza ou geração automática de tabelas em um banco compartilhado.
