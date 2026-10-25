@@ -1,9 +1,11 @@
 package app.zelar.usuario;
 
+import app.zelar.usuario.bootstrap.AdminProperties;
 import app.zelar.usuario.bootstrap.AdminProvisioner;
 import app.zelar.usuario.entity.PerfilUsuario;
 import app.zelar.usuario.entity.Usuario;
 import app.zelar.usuario.repository.UsuarioRepository;
+import jakarta.validation.Validator;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.DefaultApplicationArguments;
@@ -56,6 +58,8 @@ class AdminProvisioningIntegrationTest {
     private JwtDecoder jwtDecoder;
     @Autowired
     private AdminProvisioner adminProvisioner;
+    @Autowired
+    private Validator validator;
 
     @Test
     void deveProvisionarAdminNoStartupComSenhaHasheada() {
@@ -93,6 +97,56 @@ class AdminProvisioningIntegrationTest {
 
         assertEquals(1, usuarioRepository.findAll().stream()
                 .filter(u -> u.getEmail().equals("admin@email.com")).count());
+    }
+
+    @Test
+    void deveFalharSemPersistirQuandoEmailNaoAutenticavel() {
+        AdminProvisioner provisioner = new AdminProvisioner(
+                new AdminProperties("admin-sem-arroba", "SenhaForte123", null),
+                usuarioRepository, passwordEncoder, validator);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> provisioner.run(new DefaultApplicationArguments()));
+        assertTrue(usuarioRepository.findByEmail("admin-sem-arroba").isEmpty());
+    }
+
+    @Test
+    void adminDeveListarOcorrenciaDeCidadaoPreexistente() throws Exception {
+        mockMvc.perform(post("/api/v1/usuarios").contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "nome", "Cidadao Demo",
+                                "email", "cidadao@email.com",
+                                "senha", "SenhaCidadao123"))))
+                .andExpect(status().isCreated());
+
+        String tokenCidadao = autenticar("cidadao@email.com", "SenhaCidadao123");
+
+        mockMvc.perform(post("/api/v1/ocorrencias").contentType(MediaType.APPLICATION_JSON)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenCidadao)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "categoria", "BURACO",
+                                "descricao", "Buraco na via",
+                                "latitude", -12.97,
+                                "longitude", -38.50))))
+                .andExpect(status().isCreated());
+
+        String tokenAdmin = autenticar("admin@email.com", "SenhaForte123");
+
+        mockMvc.perform(get("/api/v1/ocorrencias")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenAdmin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElementos").value(1))
+                .andExpect(jsonPath("$.conteudo[0].descricao").value("Buraco na via"));
+    }
+
+    private String autenticar(String email, String senha) throws Exception {
+        var result = mockMvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("email", email, "senha", senha))))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        return objectMapper.readTree(result.getResponse().getContentAsString())
+                .get("accessToken").asString();
     }
 
     @TestConfiguration(proxyBeanMethods = false)
