@@ -200,6 +200,17 @@ class OcorrenciaStatusIntegrationTest {
     }
 
     @Test
+    void deveRetornar400PadronizadoParaIdentificadorInvalido() throws Exception {
+        Usuario administrador = criarUsuario("admin@email.com", PerfilUsuario.ADMINISTRADOR);
+
+        mockMvc.perform(patch("/api/v1/ocorrencias/nao-e-uuid/status")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(administrador))
+                        .contentType(MediaType.APPLICATION_JSON).content(corpo(StatusOcorrencia.EM_ANALISE)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400));
+    }
+
+    @Test
     void deveExigirAutenticacaoParaAtualizar() throws Exception {
         mockMvc.perform(patch("/api/v1/ocorrencias/{id}/status", UUID.randomUUID())
                         .contentType(MediaType.APPLICATION_JSON).content(corpo(StatusOcorrencia.EM_ANALISE)))
@@ -245,6 +256,9 @@ class OcorrenciaStatusIntegrationTest {
         Ocorrencia ocorrencia = new Ocorrencia(usuario, CategoriaOcorrencia.BURACO,
                 "Buraco na via", new Localizacao(-12.97, -38.50, null));
         ReflectionTestUtils.setField(ocorrencia, "status", status);
+        if (status != StatusOcorrencia.ENVIADA) {
+            ReflectionTestUtils.setField(ocorrencia, "dataAtualizacao", LocalDateTime.of(2026, 1, 2, 12, 0));
+        }
         ReflectionTestUtils.setField(ocorrencia, "dataCriacao", LocalDateTime.of(2026, 1, 1, 12, 0));
         return ocorrenciaRepository.saveAndFlush(ocorrencia);
     }
