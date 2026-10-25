@@ -13,6 +13,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -37,6 +38,15 @@ public class OcorrenciaController {
     ) {
         UUID usuarioId = UUID.fromString(jwt.getSubject());
         return ResponseEntity.ok(ocorrenciaService.listar(usuarioId, request));
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<OcorrenciaResponse> consultar(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        UUID usuarioId = UUID.fromString(jwt.getSubject());
+        return ResponseEntity.ok(ocorrenciaService.consultar(usuarioId, id));
     }
 
     @PostMapping
