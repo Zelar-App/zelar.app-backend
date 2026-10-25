@@ -1,5 +1,6 @@
 package app.zelar.shared.exception;
 
+import app.zelar.ocorrencia.exception.TransicaoStatusInvalidaException;
 import app.zelar.usuario.exception.EmailJaCadastradoException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.LocalDateTime;
@@ -10,6 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -26,6 +28,14 @@ public class GlobalExceptionHandler {
                 .header(HttpHeaders.WWW_AUTHENTICATE, "Bearer")
                 .body(new ApiError(HttpStatus.UNAUTHORIZED.value(), HttpStatus.UNAUTHORIZED.getReasonPhrase(),
                         exception.getMessage(), request.getRequestURI(), LocalDateTime.now()));
+    }
+
+    @ExceptionHandler(TransicaoStatusInvalidaException.class)
+    public ResponseEntity<ApiError> handleTransicaoStatusInvalida(
+            TransicaoStatusInvalidaException exception,
+            HttpServletRequest request
+    ) {
+        return criarResposta(HttpStatus.CONFLICT, exception.getMessage(), request);
     }
 
     @ExceptionHandler(EmailJaCadastradoException.class)
@@ -68,6 +78,18 @@ public class GlobalExceptionHandler {
         return criarResposta(
                 HttpStatus.BAD_REQUEST,
                 mensagem,
+                request
+        );
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiError> handleParametroInvalido(
+            MethodArgumentTypeMismatchException exception,
+            HttpServletRequest request
+    ) {
+        return criarResposta(
+                HttpStatus.BAD_REQUEST,
+                "Parâmetro '" + exception.getName() + "' inválido.",
                 request
         );
     }
