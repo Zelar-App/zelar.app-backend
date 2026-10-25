@@ -146,3 +146,23 @@ Cidadãos consultam somente as próprias ocorrências; administradores consultam
 Ocorrência inexistente ou fora do acesso do usuário retorna `404 Not Found` com a mesma mensagem `Ocorrência não encontrada.`, sem revelar se existe um registro de outra conta. Identificador inválido retorna 400 no formato `ApiError`. Ausência de autenticação, token inválido ou usuário removido retorna 401.
 
 O endpoint é somente de leitura. Fotografias e alterações de status/prioridade permanecem em suas respectivas tarefas. Os testes `OcorrenciaConsultaIntegrationTest` cobrem consulta pelo autor e por administrador, tentativa de acesso de outro cidadão, UUID inválido, recurso ausente, conta removida e uso do perfil atual mesmo com token administrativo ainda válido.
+
+## Indicadores administrativos
+
+`GET /api/v1/ocorrencias/indicadores` exige `Authorization: Bearer <accessToken>` e o perfil `ADMINISTRADOR` atual da conta no banco. Retorna `200 OK` com as contagens globais de ocorrências por status:
+
+```json
+{"enviadas":0,"emAnalise":0,"resolvidas":0}
+```
+
+Cada campo é um contador inteiro de 64 bits, inclusive quando o valor é zero. `enviadas` corresponde a `ENVIADA`, `emAnalise` a `EM_ANALISE` e `resolvidas` a `RESOLVIDA`. A consulta inclui todos os autores, conforme a visibilidade administrativa, e não retorna ocorrências nem dados pessoais.
+
+Este endpoint não recebe filtros ou paginação. Parâmetros da listagem, como `status`, `prioridade`, `usuarioId`, `pagina` ou `tamanho`, não alteram as contagens globais. Os filtros existentes continuam disponíveis em `GET /api/v1/ocorrencias`. O caminho literal `/indicadores` não é interpretado como UUID pela consulta individual.
+
+O serviço verifica a conta e sua autorização antes de executar uma única consulta agregada no banco, em transação somente de leitura. Não carrega as ocorrências em memória nem faz três consultas separadas. Novas consultas refletem criações e alterações de status já persistidas; não há cache de contagens nem necessidade de migration.
+
+Erros no formato `ApiError`: 401 para autenticação inválida ou conta removida; 403 para cidadão, inclusive se o banco estiver vazio. O perfil atual no banco prevalece sobre o perfil antigo de um JWT ainda válido. O endpoint não altera registros.
+
+`OcorrenciaIndicadoresIntegrationTest` cobre banco vazio, cada status isolado, múltiplos autores e status, criação via API e alterações de status persistidas como fixtures de teste, resposta sem dados pessoais e autorização. O teste de alterações persistidas não substitui o fluxo HTTP de status da BE-10, que será integrado em seu próprio PR. Os testes do serviço verificam autorização antes da consulta e preservação de contadores de 64 bits. A suíte padrão usa H2 com Flyway e Hibernate validate nos testes de integração; a consulta agregada também deve ser conferida em PostgreSQL separado e após reinício.
+
+Validação da BE-15: 15 testes novos (12 de integração e 3 de serviço), com 174 testes aprovados na suíte completa desta branch. PostgreSQL 17 isolado validou banco vazio, criação via API, mudanças de status persistidas como fixtures, múltiplos autores, escopo global, autorização e reinício. Execução local em Java 24, compilando para Java 21; Java 21 e imagem Docker permanecem para validação no CI.
