@@ -40,11 +40,7 @@ public class OcorrenciaService {
         Usuario usuario = usuarioRepository.findById(usuarioId)
                 .orElseThrow(() -> new BadCredentialsException("Usuário não autenticado."));
 
-        Specification<Ocorrencia> filtros = (root, query, builder) -> builder.conjunction();
-        if (usuario.getPerfil() != PerfilUsuario.ADMINISTRADOR) {
-            filtros = filtros.and((root, query, builder) ->
-                    builder.equal(root.get("usuario").get("id"), usuarioId));
-        }
+        Specification<Ocorrencia> filtros = visiveisPara(usuario, usuarioId);
         if (request.status() != null) {
             filtros = filtros.and((root, query, builder) -> builder.equal(root.get("status"), request.status()));
         }
@@ -58,6 +54,24 @@ public class OcorrenciaService {
         Page<OcorrenciaResponse> pagina = ocorrenciaRepository.findAll(filtros, pageable)
                 .map(OcorrenciaResponse::from);
         return OcorrenciaPaginaResponse.from(pagina);
+    }
+
+    @Transactional(readOnly = true)
+    public OcorrenciaResponse consultar(UUID usuarioId, UUID ocorrenciaId) {
+        Usuario usuario = usuarioRepository.findById(usuarioId)
+                .orElseThrow(() -> new BadCredentialsException("Usuário não autenticado."));
+        Specification<Ocorrencia> filtros = visiveisPara(usuario, usuarioId)
+                .and((root, query, builder) -> builder.equal(root.get("id"), ocorrenciaId));
+
+        Ocorrencia ocorrencia = ocorrenciaRepository.findOne(filtros)
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Ocorrência não encontrada."));
+        return OcorrenciaResponse.from(ocorrencia);
+    }
+
+    private Specification<Ocorrencia> visiveisPara(Usuario usuario, UUID usuarioId) {
+        return (root, query, builder) -> usuario.getPerfil() == PerfilUsuario.ADMINISTRADOR
+                ? builder.conjunction()
+                : builder.equal(root.get("usuario").get("id"), usuarioId);
     }
 
     @Transactional

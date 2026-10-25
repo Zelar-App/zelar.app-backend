@@ -42,6 +42,15 @@ public class OcorrenciaController {
         return ResponseEntity.ok(ocorrenciaService.listar(usuarioId, request));
     }
 
+    @GetMapping("/{id}")
+    public ResponseEntity<OcorrenciaResponse> consultar(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        UUID usuarioId = UUID.fromString(jwt.getSubject());
+        return ResponseEntity.ok(ocorrenciaService.consultar(usuarioId, id));
+    }
+
     @PatchMapping("/{id}/status")
     public ResponseEntity<OcorrenciaResponse> atualizarStatus(
             @PathVariable UUID id,

@@ -57,6 +57,27 @@ O login retorna `accessToken`, `tokenType` (`Bearer`), `expiresIn` em segundos e
 
 O token usa HS256 e contém emissor, UUID do usuário, perfil, emissão e expiração. As claims não incluem nome, email, telefone ou senha. O conteúdo é assinado, não criptografado. A API é stateless; estes endpoints não implementam refresh token ou revogação de tokens.
 
+## Conta administrativa
+
+O cadastro público (`POST /api/v1/usuarios`) sempre cria `CIDADAO`; o corpo não aceita `perfil` e campos extras são ignorados. A conta `ADMINISTRADOR` só é criada pelo provisionamento no startup, quando as variáveis abaixo estão definidas:
+
+| Variável | Uso | Padrão |
+| --- | --- | --- |
+| `ADMIN_EMAIL` | E-mail da conta administrativa | Obrigatória para provisionar |
+| `ADMIN_PASSWORD` | Senha em texto, entre 8 e 72 caracteres; armazenada com BCrypt | Obrigatória para provisionar |
+| `ADMIN_NOME` | Nome de exibição da conta | `Administrador` |
+
+Comportamento do provisionamento:
+
+- Sem `ADMIN_EMAIL` e `ADMIN_PASSWORD`, a aplicação inicia normalmente e nenhuma conta é criada — não há credenciais padrão em nenhum ambiente.
+- Com ambas definidas, a conta é criada como `ADMINISTRADOR` na inicialização e o procedimento é registrado em log apenas com o e-mail — a senha nunca aparece.
+- Execução repetida é segura: se o e-mail já existir, nada é criado nem alterado. Um e-mail já cadastrado como `CIDADAO` não é promovido — nesse caso o log avisa e é preciso escolher outro e-mail ou ajustar o banco manualmente.
+- Definir apenas uma das duas variáveis interrompe a inicialização com erro explícito, evitando configuração parcial silenciosa.
+- O e-mail é validado com as mesmas regras do login (formato válido, até 150 caracteres) antes de qualquer gravação. Configuração inválida interrompe a inicialização sem persistir usuário e sem expor a senha.
+- Após a conta ser provisionada, remova `ADMIN_EMAIL`, `ADMIN_PASSWORD` e `ADMIN_NOME` do ambiente: a conta já existe e manter a senha exportada só aumenta a superfície de vazamento.
+
+Para validar o fluxo administrativo: configure as três variáveis no ambiente, suba a aplicação, autentique em `POST /api/v1/auth/login` com as credenciais provisionadas e use o `accessToken` retornado nas rotas protegidas.
+
 As respostas de erro seguem `ApiError`: 400 para entrada inválida, 401 para autenticação inválida, 403 para falta de permissão, 404 para recurso inexistente e 409 para conflito como email duplicado. Somente os dois POSTs públicos acima dispensam autenticação; os demais métodos e caminhos são protegidos.
 
 ## Integração contínua
@@ -112,9 +133,19 @@ Resposta `200 OK`:
 
 Cada item de `conteudo` usa `OcorrenciaResponse`, com os mesmos campos da resposta de criação. Não há entidade `Usuario` nem seus dados pessoais na listagem. A ausência de resultados retorna uma lista vazia; uma página fora do conjunto mantém os totais e devolve conteúdo vazio.
 
-Parâmetros inválidos retornam 400 no formato `ApiError`. Ausência de autenticação, token inválido ou usuário removido retornam 401. A listagem não implementa consulta individual por ID, indicadores agregados ou alteração de status/prioridade.
+Parâmetros inválidos retornam 400 no formato `ApiError`. Ausência de autenticação, token inválido ou usuário removido retornam 401. A listagem não implementa indicadores agregados ou alteração de status/prioridade.
 
 Os testes `OcorrenciaListagemIntegrationTest` exercitam tokens reais, visibilidade, filtros, limites, paginação e desempate de ordenação com Flyway e Hibernate validate. A suíte padrão continua usando H2; para PostgreSQL real, repetir o fluxo em banco separado com dois cidadãos e um administrador provisionado de forma controlada, conferindo a visibilidade e os totais de cada perfil.
+
+## Consulta de ocorrência por ID
+
+`GET /api/v1/ocorrencias/{id}` exige `Authorization: Bearer <accessToken>` e um identificador UUID. Retorna `200 OK` com `OcorrenciaResponse`, incluindo identificadores, categoria, descrição, localização, status, prioridade e datas. Não retorna a entidade `Usuario` nem nome, email, telefone ou senha do autor.
+
+Cidadãos consultam somente as próprias ocorrências; administradores consultam todas. O serviço usa o perfil atual da conta no banco e aplica a mesma regra de visibilidade da listagem na consulta SQL. Um parâmetro `usuarioId` enviado pelo cliente não troca a identidade da consulta.
+
+Ocorrência inexistente ou fora do acesso do usuário retorna `404 Not Found` com a mesma mensagem `Ocorrência não encontrada.`, sem revelar se existe um registro de outra conta. Identificador inválido retorna 400 no formato `ApiError`. Ausência de autenticação, token inválido ou usuário removido retorna 401.
+
+O endpoint é somente de leitura. Fotografias e alterações de prioridade permanecem em suas respectivas tarefas; a atualização de status possui endpoint próprio, descrito abaixo. Os testes `OcorrenciaConsultaIntegrationTest` cobrem consulta pelo autor e por administrador, tentativa de acesso de outro cidadão, UUID inválido, recurso ausente, conta removida e uso do perfil atual mesmo com token administrativo ainda válido.
 
 ## Atualização de status
 
@@ -124,6 +155,6 @@ O fluxo do MVP é `ENVIADA → EM_ANALISE → RESOLVIDA`, sem salto de etapas, r
 
 Transição fora do fluxo retorna 409. Recurso ausente retorna 404. Cidadão recebe 403 antes da busca da ocorrência. Autenticação inválida ou conta removida retorna 401. Status ausente, desconhecido, JSON malformado ou identificador inválido retorna 400. Os erros seguem `ApiError`.
 
-A atualização é transacional e utiliza bloqueio da ocorrência durante a leitura para impedir que alterações concorrentes validem o mesmo estado antigo. O novo status é refletido nas consultas autorizadas, inclusive na listagem filtrada. A criação de uma conta administrativa permanece na INF-07; o cadastro público continua criando apenas cidadãos.
+A atualização é transacional e utiliza bloqueio da ocorrência durante a leitura para impedir que alterações concorrentes validem o mesmo estado antigo. O novo status é refletido nas consultas autorizadas, inclusive na listagem filtrada. A criação de uma conta administrativa segue o procedimento de provisionamento descrito acima; o cadastro público continua criando apenas cidadãos.
 
 Os testes de domínio verificam todas as transições entre os três estados. OcorrenciaStatusIntegrationTest cobre autorização, entrada inválida, persistência e reflexo na listagem. Para validação adicional em PostgreSQL separado, conferir também duas requisições simultâneas com o mesmo destino: apenas uma deve aplicar a transição, e a outra deve receber 409. As credenciais e a conta administrativa usadas como fixtures de validação não devem ser publicadas.
