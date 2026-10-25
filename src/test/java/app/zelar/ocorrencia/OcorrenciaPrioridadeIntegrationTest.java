@@ -1,7 +1,11 @@
 package app.zelar.ocorrencia;
 
 import app.zelar.autenticacao.service.TokenService;
-import app.zelar.ocorrencia.entity.*;
+import app.zelar.ocorrencia.entity.CategoriaOcorrencia;
+import app.zelar.ocorrencia.entity.Localizacao;
+import app.zelar.ocorrencia.entity.Ocorrencia;
+import app.zelar.ocorrencia.entity.PrioridadeOcorrencia;
+import app.zelar.ocorrencia.entity.StatusOcorrencia;
 import app.zelar.ocorrencia.repository.OcorrenciaRepository;
 import app.zelar.usuario.entity.PerfilUsuario;
 import app.zelar.usuario.entity.Usuario;
@@ -54,6 +58,7 @@ class OcorrenciaPrioridadeIntegrationTest {
         Usuario admin = usuario("admin@email.com", PerfilUsuario.ADMINISTRADOR);
         Usuario autor = usuario("autor@email.com", PerfilUsuario.CIDADAO);
         Ocorrencia ocorrencia = ocorrencia(autor);
+        entityManager.refresh(ocorrencia);
         UUID id = ocorrencia.getId();
         UUID autorId = autor.getId();
         LocalDateTime criacao = ocorrencia.getDataCriacao();

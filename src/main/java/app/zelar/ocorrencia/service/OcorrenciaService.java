@@ -1,8 +1,7 @@
 package app.zelar.ocorrencia.service;
 
-import app.zelar.ocorrencia.dto.CriarOcorrenciaRequest;
 import app.zelar.ocorrencia.dto.AtualizarPrioridadeOcorrenciaRequest;
-import org.springframework.security.access.AccessDeniedException;
+import app.zelar.ocorrencia.dto.CriarOcorrenciaRequest;
 import app.zelar.ocorrencia.dto.ListarOcorrenciasRequest;
 import app.zelar.ocorrencia.dto.OcorrenciaPaginaResponse;
 import app.zelar.ocorrencia.dto.OcorrenciaResponse;
@@ -17,6 +16,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
