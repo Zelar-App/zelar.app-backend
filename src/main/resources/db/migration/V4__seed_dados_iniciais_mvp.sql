@@ -33,7 +33,7 @@ INSERT INTO usuario (
     data_cadastro
 )
 SELECT 
-    'b1ffcd00-0d1c-5fg9-cc7e-7cc0ce491b22',
+    'b1ffcd00-0d1c-5fa9-cc7e-7cc0ce491b22',
     'Cidadão Teste',
     'cidadao@zelar.app',
     '$2a$10$7EqJtq986P2B78P8O30Sce.4aZ5yLwZc0k9s2aZ5yLwZc0k9s2aZ5',
