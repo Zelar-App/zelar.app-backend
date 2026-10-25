@@ -1,6 +1,7 @@
 package app.zelar.ocorrencia.service;
 
 import app.zelar.ocorrencia.dto.CriarOcorrenciaRequest;
+import app.zelar.ocorrencia.dto.OcorrenciaIndicadoresResponse;
 import app.zelar.ocorrencia.dto.ListarOcorrenciasRequest;
 import app.zelar.ocorrencia.dto.OcorrenciaPaginaResponse;
 import app.zelar.ocorrencia.dto.OcorrenciaResponse;
@@ -22,6 +23,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -169,6 +171,45 @@ class OcorrenciaServiceTest {
                 "Lixo acumulado", 0.0, 0.0, null);
 
         assertThrows(BadCredentialsException.class, () -> ocorrenciaService.criar(usuarioId, request));
+
+        verifyNoInteractions(ocorrenciaRepository);
+    }
+    @Test
+    void deveConsultarIndicadoresAposConfirmarPerfilAdministrativoAtual() {
+        UUID usuarioId = UUID.randomUUID();
+        Usuario admin = new Usuario("Admin", "admin@email.com", "hash", PerfilUsuario.ADMINISTRADOR, null);
+        OcorrenciaIndicadoresResponse indicadores = new OcorrenciaIndicadoresResponse(3_000_000_000L, 2, 1);
+        when(usuarioRepository.findById(usuarioId)).thenReturn(Optional.of(admin));
+        when(ocorrenciaRepository.contarPorStatus()).thenReturn(indicadores);
+
+        OcorrenciaIndicadoresResponse response = ocorrenciaService.consultarIndicadores(usuarioId);
+
+        assertEquals(3_000_000_000L, response.enviadas());
+        assertEquals(2, response.emAnalise());
+        assertEquals(1, response.resolvidas());
+        var ordem = inOrder(usuarioRepository, ocorrenciaRepository);
+        ordem.verify(usuarioRepository).findById(usuarioId);
+        ordem.verify(ocorrenciaRepository).contarPorStatus();
+        verifyNoMoreInteractions(ocorrenciaRepository);
+    }
+
+    @Test
+    void deveRecusarIndicadoresParaCidadaoAntesDeConsultarContagens() {
+        UUID usuarioId = UUID.randomUUID();
+        Usuario cidadao = new Usuario("João", "joao@email.com", "hash", PerfilUsuario.CIDADAO, null);
+        when(usuarioRepository.findById(usuarioId)).thenReturn(Optional.of(cidadao));
+
+        assertThrows(AccessDeniedException.class, () -> ocorrenciaService.consultarIndicadores(usuarioId));
+
+        verifyNoInteractions(ocorrenciaRepository);
+    }
+
+    @Test
+    void deveRecusarIndicadoresParaUsuarioRemovidoAntesDeConsultarContagens() {
+        UUID usuarioId = UUID.randomUUID();
+        when(usuarioRepository.findById(usuarioId)).thenReturn(Optional.empty());
+
+        assertThrows(BadCredentialsException.class, () -> ocorrenciaService.consultarIndicadores(usuarioId));
 
         verifyNoInteractions(ocorrenciaRepository);
     }
