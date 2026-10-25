@@ -17,6 +17,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -84,7 +85,7 @@ class OcorrenciaServiceTest {
                 "Buraco na via", new Localizacao(-12.97, -38.50, null));
         PageRequest pageable = PageRequest.of(1, 2, Sort.by(Sort.Direction.DESC, "dataCriacao", "id"));
         when(usuarioRepository.findById(usuarioId)).thenReturn(Optional.of(usuario));
-        when(ocorrenciaRepository.findAll(any(Specification.class), any(Pageable.class)))
+        when(ocorrenciaRepository.findAll(ArgumentMatchers.<Specification<Ocorrencia>>any(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(ocorrencia), pageable, 5));
 
         OcorrenciaPaginaResponse response = ocorrenciaService.listar(usuarioId,
@@ -95,7 +96,7 @@ class OcorrenciaServiceTest {
         assertEquals(5, response.totalElementos());
         assertEquals(3, response.totalPaginas());
         assertEquals("Buraco na via", response.conteudo().getFirst().descricao());
-        verify(ocorrenciaRepository).findAll(any(Specification.class), eq(pageable));
+        verify(ocorrenciaRepository).findAll(ArgumentMatchers.<Specification<Ocorrencia>>any(), eq(pageable));
         verify(ocorrenciaRepository, never()).save(any());
     }
 
