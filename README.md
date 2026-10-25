@@ -145,4 +145,20 @@ Cidadãos consultam somente as próprias ocorrências; administradores consultam
 
 Ocorrência inexistente ou fora do acesso do usuário retorna `404 Not Found` com a mesma mensagem `Ocorrência não encontrada.`, sem revelar se existe um registro de outra conta. Identificador inválido retorna 400 no formato `ApiError`. Ausência de autenticação, token inválido ou usuário removido retorna 401.
 
-O endpoint é somente de leitura. Fotografias e alterações de status/prioridade permanecem em suas respectivas tarefas. Os testes `OcorrenciaConsultaIntegrationTest` cobrem consulta pelo autor e por administrador, tentativa de acesso de outro cidadão, UUID inválido, recurso ausente, conta removida e uso do perfil atual mesmo com token administrativo ainda válido.
+O endpoint é somente de leitura. Fotografias e alterações de status permanecem em suas respectivas tarefas; a atualização de prioridade possui endpoint próprio, descrito abaixo. Os testes `OcorrenciaConsultaIntegrationTest` cobrem consulta pelo autor e por administrador, tentativa de acesso de outro cidadão, UUID inválido, recurso ausente, conta removida e uso do perfil atual mesmo com token administrativo ainda válido.
+
+## Atualização de prioridade
+
+`PATCH /api/v1/ocorrencias/{id}/prioridade` exige `Authorization: Bearer <accessToken>` e um corpo JSON como `{"prioridade":"ALTA"}`. A operação é restrita ao perfil `ADMINISTRADOR` atual da conta no banco; um cidadão não pode alterar prioridade, mesmo sendo o autor da ocorrência. O UUID do usuário é obtido do token.
+
+Prioridades aceitas: `BAIXA`, `MEDIA` e `ALTA`. Uma ocorrência continua sendo criada sem prioridade. O administrador pode atribuir ou trocar a prioridade em qualquer status, inclusive em uma ocorrência resolvida; essa operação não altera seu andamento. Enviar `null` ou omitir a prioridade retorna 400, sem remover o valor existente. Repetir a mesma prioridade retorna sucesso sem modificar `dataAtualizacao`.
+
+Uma mudança retorna `200 OK` com `OcorrenciaResponse` e atualiza `dataAtualizacao`. Autor, categoria, descrição, localização, status e data de criação são preservados; campos extras enviados no JSON não alteram esses atributos. A prioridade pode ser consultada na listagem e na consulta por ID, respeitando suas regras de visibilidade, e nos filtros de listagem já existentes. Não há dados pessoais do autor na resposta.
+
+A operação é transacional e bloqueia o registro durante a leitura. O método de leitura com bloqueio é compartilhável com a atualização de status, evitando que as duas operações sobrescrevam outros campos ao serem integradas. Atualizações concorrentes de prioridade são serializadas; entre duas prioridades diferentes, prevalece a última alteração efetivamente aplicada.
+
+Respostas de erro no formato `ApiError`: 400 para UUID ou corpo inválido; 401 para autenticação inválida ou conta removida; 403 para cidadão, antes de buscar a ocorrência; 404 para ocorrência inexistente quando consultada por administrador. Valores fora do domínio são recusados. A operação não exige migration, pois a coluna e as constraints de prioridade já fazem parte do schema.
+
+Os testes de domínio cobrem atribuição, todas as combinações de troca e repetição e recusa de prioridade nula. Os testes do serviço conferem autorização antes da busca, leitura bloqueada e recurso ausente. `OcorrenciaPrioridadeIntegrationTest` cobre persistência com Flyway e Hibernate validate, reflexo na consulta/listagem, todos os status, entrada inválida, conta removida, perfil atualizado no banco e preservação dos demais atributos. A suíte padrão usa H2; a validação de PostgreSQL deve ocorrer em banco separado, conferindo também concorrência e persistência após reinício.
+
+Validação da BE-14: 42 casos novos (23 de integração, 13 de domínio e 6 de serviço), com 201 testes aprovados na suíte completa. O fluxo também foi conferido em PostgreSQL 17 isolado, incluindo duas requisições concorrentes, preservação dos campos e reinício da aplicação. Execução local em Java 24, compilando para Java 21; Java 21 e imagem Docker permanecem para validação no CI.
