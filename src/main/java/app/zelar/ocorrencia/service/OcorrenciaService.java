@@ -1,11 +1,19 @@
 package app.zelar.ocorrencia.service;
 
 import app.zelar.ocorrencia.dto.CriarOcorrenciaRequest;
+import app.zelar.ocorrencia.dto.ListarOcorrenciasRequest;
+import app.zelar.ocorrencia.dto.OcorrenciaPaginaResponse;
+import app.zelar.ocorrencia.dto.OcorrenciaResponse;
 import app.zelar.ocorrencia.entity.Localizacao;
 import app.zelar.ocorrencia.entity.Ocorrencia;
 import app.zelar.ocorrencia.repository.OcorrenciaRepository;
+import app.zelar.usuario.entity.PerfilUsuario;
 import app.zelar.usuario.entity.Usuario;
 import app.zelar.usuario.repository.UsuarioRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,6 +30,31 @@ public class OcorrenciaService {
                              UsuarioRepository usuarioRepository) {
         this.ocorrenciaRepository = ocorrenciaRepository;
         this.usuarioRepository = usuarioRepository;
+    }
+
+    @Transactional(readOnly = true)
+    public OcorrenciaPaginaResponse listar(UUID usuarioId, ListarOcorrenciasRequest request) {
+        Usuario usuario = usuarioRepository.findById(usuarioId)
+                .orElseThrow(() -> new BadCredentialsException("Usuário não autenticado."));
+
+        Specification<Ocorrencia> filtros = (root, query, builder) -> builder.conjunction();
+        if (usuario.getPerfil() != PerfilUsuario.ADMINISTRADOR) {
+            filtros = filtros.and((root, query, builder) ->
+                    builder.equal(root.get("usuario").get("id"), usuarioId));
+        }
+        if (request.status() != null) {
+            filtros = filtros.and((root, query, builder) -> builder.equal(root.get("status"), request.status()));
+        }
+        if (request.prioridade() != null) {
+            filtros = filtros.and((root, query, builder) ->
+                    builder.equal(root.get("prioridade"), request.prioridade()));
+        }
+
+        PageRequest pageable = PageRequest.of(request.pagina(), request.tamanho(),
+                Sort.by(Sort.Direction.DESC, "dataCriacao", "id"));
+        Page<OcorrenciaResponse> pagina = ocorrenciaRepository.findAll(filtros, pageable)
+                .map(OcorrenciaResponse::from);
+        return OcorrenciaPaginaResponse.from(pagina);
     }
 
     @Transactional
