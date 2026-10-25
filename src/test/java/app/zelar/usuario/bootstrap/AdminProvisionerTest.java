@@ -3,6 +3,8 @@ package app.zelar.usuario.bootstrap;
 import app.zelar.usuario.entity.PerfilUsuario;
 import app.zelar.usuario.entity.Usuario;
 import app.zelar.usuario.repository.UsuarioRepository;
+import jakarta.validation.Validation;
+import jakarta.validation.Validator;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -23,9 +25,10 @@ class AdminProvisionerTest {
     private UsuarioRepository usuarioRepository;
 
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+    private final Validator validator = Validation.buildDefaultValidatorFactory().getValidator();
 
     private void executar(AdminProperties properties) throws Exception {
-        new AdminProvisioner(properties, usuarioRepository, passwordEncoder)
+        new AdminProvisioner(properties, usuarioRepository, passwordEncoder, validator)
                 .run(new DefaultApplicationArguments());
     }
 
@@ -86,6 +89,27 @@ class AdminProvisionerTest {
     void deveExigirSenhaQuandoEmailInformado() {
         assertThrows(IllegalArgumentException.class,
                 () -> executar(new AdminProperties("admin@email.com", null, null)));
+
+        verifyNoInteractions(usuarioRepository);
+    }
+
+    @Test
+    void deveRejeitarEmailInvalidoParaAutenticacao() {
+        for (String email : new String[]{"admin-sem-arroba", "admin@", "@email.com", "admin email.com"}) {
+            IllegalArgumentException erro = assertThrows(IllegalArgumentException.class,
+                    () -> executar(new AdminProperties(email, "SenhaForte123", null)));
+
+            assertTrue(erro.getMessage().startsWith("ADMIN_EMAIL inválido"));
+        }
+        verifyNoInteractions(usuarioRepository);
+    }
+
+    @Test
+    void deveRejeitarEmailAcimaDoLimiteDoLogin() {
+        String emailLongo = "a".repeat(141) + "@email.com";
+
+        assertThrows(IllegalArgumentException.class,
+                () -> executar(new AdminProperties(emailLongo, "SenhaForte123", null)));
 
         verifyNoInteractions(usuarioRepository);
     }
