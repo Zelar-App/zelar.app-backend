@@ -1,6 +1,9 @@
 package app.zelar.ocorrencia.service;
 
 import app.zelar.ocorrencia.dto.CriarOcorrenciaRequest;
+import app.zelar.ocorrencia.dto.ListarOcorrenciasRequest;
+import app.zelar.ocorrencia.dto.OcorrenciaPaginaResponse;
+import app.zelar.ocorrencia.entity.Localizacao;
 import app.zelar.ocorrencia.entity.CategoriaOcorrencia;
 import app.zelar.ocorrencia.entity.Ocorrencia;
 import app.zelar.ocorrencia.entity.StatusOcorrencia;
@@ -18,6 +21,13 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.authentication.BadCredentialsException;
 
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
+
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -64,6 +74,40 @@ class OcorrenciaServiceTest {
         assertNull(ocorrencia.getDataAtualizacao());
         assertNotNull(ocorrencia.getDataCriacao());
         verify(ocorrenciaRepository).save(ocorrencia);
+    }
+
+    @Test
+    void deveRetornarPaginaComMetadadosEOrdenacaoDeterministica() {
+        UUID usuarioId = UUID.randomUUID();
+        Usuario usuario = new Usuario("João", "joao@email.com", "hash", PerfilUsuario.CIDADAO, null);
+        Ocorrencia ocorrencia = new Ocorrencia(usuario, CategoriaOcorrencia.BURACO,
+                "Buraco na via", new Localizacao(-12.97, -38.50, null));
+        PageRequest pageable = PageRequest.of(1, 2, Sort.by(Sort.Direction.DESC, "dataCriacao", "id"));
+        when(usuarioRepository.findById(usuarioId)).thenReturn(Optional.of(usuario));
+        when(ocorrenciaRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(ocorrencia), pageable, 5));
+
+        OcorrenciaPaginaResponse response = ocorrenciaService.listar(usuarioId,
+                new ListarOcorrenciasRequest(1, 2, StatusOcorrencia.ENVIADA, null));
+
+        assertEquals(1, response.pagina());
+        assertEquals(2, response.tamanho());
+        assertEquals(5, response.totalElementos());
+        assertEquals(3, response.totalPaginas());
+        assertEquals("Buraco na via", response.conteudo().getFirst().descricao());
+        verify(ocorrenciaRepository).findAll(any(Specification.class), eq(pageable));
+        verify(ocorrenciaRepository, never()).save(any());
+    }
+
+    @Test
+    void deveRejeitarListagemDeUsuarioInexistenteSemConsultarOcorrencias() {
+        UUID usuarioId = UUID.randomUUID();
+        when(usuarioRepository.findById(usuarioId)).thenReturn(Optional.empty());
+
+        assertThrows(BadCredentialsException.class, () -> ocorrenciaService.listar(usuarioId,
+                new ListarOcorrenciasRequest(null, null, null, null)));
+
+        verifyNoInteractions(ocorrenciaRepository);
     }
 
     @Test
