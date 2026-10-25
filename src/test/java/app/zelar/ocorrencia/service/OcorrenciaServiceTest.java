@@ -3,6 +3,8 @@ package app.zelar.ocorrencia.service;
 import app.zelar.ocorrencia.dto.CriarOcorrenciaRequest;
 import app.zelar.ocorrencia.dto.ListarOcorrenciasRequest;
 import app.zelar.ocorrencia.dto.OcorrenciaPaginaResponse;
+import app.zelar.ocorrencia.dto.OcorrenciaResponse;
+import app.zelar.shared.exception.RecursoNaoEncontradoException;
 import app.zelar.ocorrencia.entity.Localizacao;
 import app.zelar.ocorrencia.entity.CategoriaOcorrencia;
 import app.zelar.ocorrencia.entity.Ocorrencia;
@@ -21,6 +23,7 @@ import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -107,6 +110,53 @@ class OcorrenciaServiceTest {
 
         assertThrows(BadCredentialsException.class, () -> ocorrenciaService.listar(usuarioId,
                 new ListarOcorrenciasRequest(null, null, null, null)));
+
+        verifyNoInteractions(ocorrenciaRepository);
+    }
+
+    @Test
+    void deveConsultarOcorrenciaComoDtoSemGravarAlteracoes() {
+        UUID usuarioId = UUID.randomUUID();
+        UUID ocorrenciaId = UUID.randomUUID();
+        Usuario usuario = new Usuario("João", "joao@email.com", "hash", PerfilUsuario.CIDADAO, null);
+        ReflectionTestUtils.setField(usuario, "id", usuarioId);
+        Ocorrencia ocorrencia = new Ocorrencia(usuario, CategoriaOcorrencia.BURACO,
+                "Buraco na via", new Localizacao(-12.97, -38.50, null));
+        ReflectionTestUtils.setField(ocorrencia, "id", ocorrenciaId);
+        when(usuarioRepository.findById(usuarioId)).thenReturn(Optional.of(usuario));
+        when(ocorrenciaRepository.findOne(ArgumentMatchers.<Specification<Ocorrencia>>any()))
+                .thenReturn(Optional.of(ocorrencia));
+
+        OcorrenciaResponse response = ocorrenciaService.consultar(usuarioId, ocorrenciaId);
+
+        assertEquals(ocorrenciaId, response.id());
+        assertEquals(usuarioId, response.usuarioId());
+        assertEquals("Buraco na via", response.descricao());
+        assertEquals(StatusOcorrencia.ENVIADA, response.status());
+        verify(ocorrenciaRepository, never()).save(any());
+    }
+
+    @Test
+    void deveRetornarNaoEncontradoQuandoConsultaVisivelNaoTiverResultado() {
+        UUID usuarioId = UUID.randomUUID();
+        Usuario usuario = new Usuario("João", "joao@email.com", "hash", PerfilUsuario.CIDADAO, null);
+        when(usuarioRepository.findById(usuarioId)).thenReturn(Optional.of(usuario));
+        when(ocorrenciaRepository.findOne(ArgumentMatchers.<Specification<Ocorrencia>>any()))
+                .thenReturn(Optional.empty());
+
+        RecursoNaoEncontradoException exception = assertThrows(RecursoNaoEncontradoException.class,
+                () -> ocorrenciaService.consultar(usuarioId, UUID.randomUUID()));
+
+        assertEquals("Ocorrência não encontrada.", exception.getMessage());
+    }
+
+    @Test
+    void deveRecusarConsultaDeUsuarioInexistenteAntesDeBuscarOcorrencia() {
+        UUID usuarioId = UUID.randomUUID();
+        when(usuarioRepository.findById(usuarioId)).thenReturn(Optional.empty());
+
+        assertThrows(BadCredentialsException.class,
+                () -> ocorrenciaService.consultar(usuarioId, UUID.randomUUID()));
 
         verifyNoInteractions(ocorrenciaRepository);
     }
