@@ -27,14 +27,14 @@ public class TokenService {
 
     public String gerar(Usuario usuario) {
         Instant emitidoEm = clock.instant();
-        
-JwtClaimsSet claims = JwtClaimsSet.builder()
-        .issuer(properties.issuer())
-        .subject(usuario.getId().toString())
-        .issuedAt(emitidoEm)
-        .expiresAt(emitidoEm.plus(properties.tokenDuration()))
-        .claim("perfil", usuario.getPerfil().name())
-        .build();
+
+        JwtClaimsSet claims = JwtClaimsSet.builder()
+                .issuer(properties.issuer())
+                .subject(usuario.getId().toString())
+                .issuedAt(emitidoEm)
+                .expiresAt(emitidoEm.plus(properties.tokenDuration()))
+                .claim("perfil", usuario.getPerfil().name())
+                .build();
         JwsHeader header = JwsHeader.with(MacAlgorithm.HS256).type("JWT").build();
         return jwtEncoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();
     }
