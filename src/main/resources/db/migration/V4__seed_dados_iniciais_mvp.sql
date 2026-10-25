@@ -9,7 +9,8 @@ INSERT INTO usuario (
     telefone, 
     papel, 
     data_cadastro
-) VALUES (
+)
+SELECT 
     'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
     'Administrador Zelar',
     'admin@zelar.app',
@@ -17,9 +18,11 @@ INSERT INTO usuario (
     '31999999999',
     'ADMINISTRADOR',
     CURRENT_TIMESTAMP
-) ON CONFLICT (email) DO NOTHING;
+WHERE NOT EXISTS (
+    SELECT 1 FROM usuario WHERE email = 'admin@zelar.app'
+);
 
--- 2. Cidadão Padrão para testes de envio
+-- 2. Cidadão Padrão para testes
 INSERT INTO usuario (
     id, 
     nome, 
@@ -28,7 +31,8 @@ INSERT INTO usuario (
     telefone, 
     papel, 
     data_cadastro
-) VALUES (
+)
+SELECT 
     'b1ffcd00-0d1c-5fg9-cc7e-7cc0ce491b22',
     'Cidadão Teste',
     'cidadao@zelar.app',
@@ -36,4 +40,6 @@ INSERT INTO usuario (
     '31988888888',
     'CIDADAO',
     CURRENT_TIMESTAMP
-) ON CONFLICT (email) DO NOTHING;
+WHERE NOT EXISTS (
+    SELECT 1 FROM usuario WHERE email = 'cidadao@zelar.app'
+);
