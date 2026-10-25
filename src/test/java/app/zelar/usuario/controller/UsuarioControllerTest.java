@@ -1,5 +1,6 @@
 package app.zelar.usuario.controller;
 
+import app.zelar.autenticacao.security.SecurityExceptionHandler;
 import app.zelar.config.SecurityConfig;
 import app.zelar.usuario.dto.CriarUsuarioRequest;
 import app.zelar.usuario.entity.PerfilUsuario;
@@ -11,6 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import tools.jackson.databind.ObjectMapper;
@@ -22,7 +24,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(UsuarioController.class)
-@Import(SecurityConfig.class)
+@Import({SecurityConfig.class, SecurityExceptionHandler.class})
 class UsuarioControllerTest {
 
     @Autowired
@@ -33,6 +35,9 @@ class UsuarioControllerTest {
 
     @MockitoBean
     private UsuarioService usuarioService;
+
+    @MockitoBean
+    private JwtDecoder jwtDecoder;
 
     @Test
     void deveRetornar201AoCadastrarUsuario() throws Exception {
