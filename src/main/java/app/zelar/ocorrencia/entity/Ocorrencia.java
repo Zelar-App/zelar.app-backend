@@ -69,6 +69,15 @@ public class Ocorrencia {
         this.dataCriacao = LocalDateTime.now();
     }
 
+    public void atualizarPrioridade(PrioridadeOcorrencia novaPrioridade) {
+        Objects.requireNonNull(novaPrioridade, "A prioridade é obrigatória.");
+        if (this.prioridade == novaPrioridade) {
+            return;
+        }
+        this.prioridade = novaPrioridade;
+        this.dataAtualizacao = LocalDateTime.now();
+    }
+
     public UUID getId() {
         return id;
     }
