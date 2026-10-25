@@ -1,6 +1,7 @@
 package app.zelar.ocorrencia.service;
 
 import app.zelar.ocorrencia.dto.CriarOcorrenciaRequest;
+import app.zelar.ocorrencia.dto.OcorrenciaIndicadoresResponse;
 import app.zelar.ocorrencia.dto.ListarOcorrenciasRequest;
 import app.zelar.ocorrencia.dto.OcorrenciaPaginaResponse;
 import app.zelar.ocorrencia.dto.OcorrenciaResponse;
@@ -15,6 +16,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,6 +33,16 @@ public class OcorrenciaService {
                              UsuarioRepository usuarioRepository) {
         this.ocorrenciaRepository = ocorrenciaRepository;
         this.usuarioRepository = usuarioRepository;
+    }
+
+    @Transactional(readOnly = true)
+    public OcorrenciaIndicadoresResponse consultarIndicadores(UUID usuarioId) {
+        Usuario usuario = usuarioRepository.findById(usuarioId)
+                .orElseThrow(() -> new BadCredentialsException("Usuário não autenticado."));
+        if (usuario.getPerfil() != PerfilUsuario.ADMINISTRADOR) {
+            throw new AccessDeniedException("Você não possui permissão para acessar este recurso.");
+        }
+        return ocorrenciaRepository.contarPorStatus();
     }
 
     @Transactional(readOnly = true)
