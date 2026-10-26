@@ -194,3 +194,72 @@ Erros no formato `ApiError`: 401 para autenticação inválida ou conta removida
 `OcorrenciaIndicadoresIntegrationTest` cobre banco vazio, cada status isolado, múltiplos autores e status, criação via API e alterações de status persistidas como fixtures de teste, resposta sem dados pessoais e autorização. O teste de alterações persistidas complementa os testes próprios do fluxo HTTP de status da BE-10. Os testes do serviço verificam autorização antes da consulta e preservação de contadores de 64 bits. A suíte padrão usa H2 com Flyway e Hibernate validate nos testes de integração; a consulta agregada também deve ser conferida em PostgreSQL separado e após reinício.
 
 Validação da BE-15: 15 testes novos (12 de integração e 3 de serviço), com 174 testes aprovados na suíte completa desta branch. PostgreSQL 17 isolado validou banco vazio, criação via API, mudanças de status persistidas como fixtures, múltiplos autores, escopo global, autorização e reinício. Execução local em Java 24, compilando para Java 21; Java 21 e imagem Docker permanecem para validação no CI.
+
+## Fotografias de ocorrências — preparação da BE-13
+
+Esta branch prepara validação, autorização e acesso ao Supabase Storage, sem migration, entidade de anexo ou endpoint de fotografias. A BE-13 permanece em andamento. O contrato abaixo é uma proposta para alinhamento com a equipe responsável pela DB-09; a integração completa depende desse alinhamento e da migration aprovada.
+
+### Componentes preparados
+
+- `ValidadorFotografia`: aceita JPEG/PNG de até 5 MiB (5.242.880 bytes), verifica o formato pelo conteúdo, exige correspondência com o MIME declarado e decodifica a imagem. Limita cada lado a 8192 pixels e a área a 16 milhões de pixels antes da decodificação. Regrava a imagem sem os metadados e os bytes adicionais do arquivo recebido; o resultado também deve respeitar 5 MiB. O nome original não determina o caminho de armazenamento.
+- `FotografiaValidada`: transporta conteúdo, MIME, extensão, tamanho e dimensões; copia o vetor de bytes na entrada e na saída.
+- `FotografiaAcessoService`: reutiliza `OcorrenciaService.consultar`, preservando a identidade, o perfil atual e a visibilidade já aplicados às ocorrências. Somente o autor pode enviar; autor e administrador autorizado podem consultar. Ocorrência fora do escopo continua retornando o mesmo erro de recurso ausente.
+- `FotografiaStorage` e `SupabaseFotografiaStorage`: isolam envio, leitura privada e exclusão técnica para compensação. O adaptador recebe uma chave UUID com extensão correspondente, conhecida antes do envio, e recusa caminhos arbitrários e sobrescrita. A leitura tem limite de bytes, independentemente do tamanho declarado pelo provedor. Falhas de infraestrutura usam uma mensagem controlada, sem corpo da resposta ou credencial.
+
+O adaptador **ainda não é um bean** e nenhuma chamada de armazenamento está ligada aos fluxos HTTP. Isso permite integrar a preparação sem exigir credenciais e sem mudar a criação/listagem de ocorrências. Os testes HTTP usam servidor simulado; não validam um bucket real. As novas exceções só receberão mapeamento em `ApiError` quando os endpoints forem implementados.
+
+### Proposta de API após a DB-09
+
+A criação existente permanece JSON e aceita ocorrência sem fotografia. Quando houver foto, o cliente cria a ocorrência primeiro e depois envia o anexo:
+
+| Operação proposta | Contrato |
+| --- | --- |
+| `POST /api/v1/ocorrencias/{id}/fotografia` | Bearer do Zelar; somente autor; `multipart/form-data`, campo `foto`; uma fotografia por ocorrência; sem substituição no MVP; sucesso 201 |
+| `GET /api/v1/ocorrencias/{id}/fotografia` | Bearer do Zelar; autor ou administrador; conteúdo binário JPEG/PNG; sucesso 200; sem URL pública do bucket |
+
+Erros previstos para a implementação HTTP: 400 para conteúdo inválido; 401 para autenticação inválida/conta removida; 403 quando um administrador tenta anexar em nome de outro autor; 404 para ocorrência fora do escopo, inexistente ou fotografia ausente; 409 para fotografia já vinculada; 413 para excesso de tamanho na camada multipart; 503 para indisponibilidade do armazenamento. O limite multipart da requisição precisa comportar os cabeçalhos além dos 5 MiB do arquivo. As respostas de leitura devem definir MIME conhecido, `X-Content-Type-Options: nosniff` e cache privado sem armazenamento.
+
+Propõe-se acrescentar `possuiFotografia` às respostas de ocorrência somente quando a persistência estiver disponível. O frontend deve buscar os bytes com autenticação e gerenciar o ciclo de vida da URL temporária do navegador; uma tag de imagem com URL direta não envia o Bearer da aplicação. Se o envio da foto falhar depois da criação, o cliente deve guardar o ID criado e repetir apenas o envio da foto, sem cadastrar a ocorrência novamente. O bloqueio atual de envio com foto permanece até esse fluxo estar completo.
+
+### Proposta para a DB-09
+
+Usar a tabela `anexo`, com uma fotografia por ocorrência no MVP:
+
+| Campo proposto | Regra |
+| --- | --- |
+| `id` | UUID, chave primária gerada pelo backend |
+| `ocorrencia_id` | UUID obrigatório, FK e UNIQUE; impede duas fotografias para a mesma ocorrência |
+| `bucket` | VARCHAR(100) obrigatório |
+| `chave_objeto` | VARCHAR(255) obrigatório; UUID gerado pelo backend + `.jpg` ou `.png`; UNIQUE junto com `bucket` |
+| `tipo_conteudo` | VARCHAR(50), somente `image/jpeg` e `image/png` |
+| `tamanho_bytes` | BIGINT, maior que zero e até 5.242.880; refere-se ao conteúdo regravado |
+| `largura`, `altura` | Inteiros positivos até 8192, produto até 16.000.000 |
+| `data_criacao` | TIMESTAMP obrigatório, seguindo o padrão atual |
+
+Não persistir os bytes no PostgreSQL, chave secreta, URL pública/assinada ou caminho fornecido pelo cliente. Recomenda-se FK com exclusão restrita inicialmente, pois exclusão em cascata do metadado não remove o objeto do Storage. O MVP não terá endpoint público de exclusão/substituição da foto.
+
+**Decisão a alinhar antes da implementação:** PostgreSQL e Storage não participam da mesma transação. Recomenda-se reservar o vínculo/chave antes do upload e manter estado durável do envio (`PENDENTE`, `DISPONIVEL` e falha/limpeza pendente), com reconciliação das falhas; somente anexos disponíveis devem aparecer na consulta. A equipe deve confirmar os campos de estado/data de atualização ou estratégia equivalente na DB-09. O método `excluir` prepara a compensação, mas uma tentativa de exclusão isolada não garante ausência de objetos órfãos. Uploads concorrentes e repetição após timeout precisam ser testados na integração, respeitando a unicidade do vínculo e sem substituir objeto existente.
+
+### Supabase Storage privado
+
+Preparar o bucket privado `ocorrencias-fotografias`, com restrição a JPEG/PNG e 5 MiB. A validação do backend continua obrigatória. O JWT do Zelar identifica o usuário somente na API do Zelar; o backend consulta o Storage com uma **secret key do servidor** (`sb_secret_...`), enviada no cabeçalho `apikey`. O adaptador desta etapa suporta esse tipo de chave, não a chave pública nem o JWT do Zelar. Nunca configurar a secret key no frontend, em variável `VITE_*`, em logs ou no repositório.
+
+Variáveis propostas, **ainda não consumidas pela aplicação**:
+
+```dotenv
+SUPABASE_STORAGE_URL=https://seu-projeto.supabase.co
+SUPABASE_STORAGE_BUCKET=ocorrencias-fotografias
+SUPABASE_STORAGE_SECRET_KEY=
+```
+
+Na integração, criar configuração própria e um `RestClient.Builder` dedicado, com limites explícitos de conexão/leitura e sem redirecionar credenciais para outro host. Validar configuração sem exibir a chave. Não habilitar tentativas automáticas de upload antes de definir o tratamento de operação com resultado incerto. Não alterar `SUPABASE_PUBLISHABLE_KEY` ou `JWT_SECRET` para usar a chave de Storage.
+
+Referências do fornecedor: [chaves de API](https://supabase.com/docs/guides/getting-started/api-keys), [buckets e restrições](https://supabase.com/docs/guides/storage/buckets/fundamentals), [download privado](https://supabase.com/docs/guides/storage/serving/downloads) e [operações HTTP no SDK oficial](https://github.com/supabase/storage-js/blob/main/src/packages/StorageFileApi.ts).
+
+### Validação e próximos passos
+
+Os testes de validação cobrem arquivos vazios, MIME incompatível, conteúdo falso/truncado, excesso real de bytes, dimensões excessivas e cópia defensiva. Os testes de autorização verificam delegação à visibilidade existente, envio pelo autor, consulta administrativa e propagação dos erros de autenticação/recurso ausente. Os testes do adaptador verificam rotas, cabeçalhos, conteúdo, limites e falhas com HTTP simulado.
+
+Após a DB-09: integrar entidade/repositório, configuração e limites HTTP, orquestração consistente do envio, endpoints e tratamento de erros; testar concorrência, falha de persistência/Storage, compensação e consulta por diferentes perfis; validar um bucket privado real separado; por fim conectar o frontend e retirar o bloqueio atual de fotografia. Nenhuma migration deve ser duplicada nesta branch e a BE-13 só pode ser concluída após esse fluxo completo.
+
+Validação desta preparação: 318 testes aprovados, sem falhas ou erros, incluindo 64 novos (20 de validação, 6 de acesso e 38 de armazenamento simulado). Execução local em Java 24, compilando para Java 21; a suíte usa H2 nos testes de integração existentes. PostgreSQL e bucket privado reais, configuração de rede/credenciais e CI com Java 21 permanecem para a integração. As etapas RED e GREEN estão registradas em commits separados, com um commit próprio para cada classe nova.
