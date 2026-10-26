@@ -1,5 +1,6 @@
 package app.zelar.ocorrencia.controller;
 
+import app.zelar.ocorrencia.dto.AtualizarPrioridadeOcorrenciaRequest;
 import app.zelar.ocorrencia.dto.AtualizarStatusOcorrenciaRequest;
 import app.zelar.ocorrencia.dto.CriarOcorrenciaRequest;
 import app.zelar.ocorrencia.dto.OcorrenciaIndicadoresResponse;
@@ -8,7 +9,9 @@ import app.zelar.ocorrencia.dto.OcorrenciaPaginaResponse;
 import app.zelar.ocorrencia.dto.OcorrenciaResponse;
 import app.zelar.ocorrencia.entity.Ocorrencia;
 import app.zelar.ocorrencia.service.OcorrenciaService;
+
 import jakarta.validation.Valid;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -68,6 +71,16 @@ public class OcorrenciaController {
     ) {
         UUID usuarioId = UUID.fromString(jwt.getSubject());
         return ResponseEntity.ok(ocorrenciaService.atualizarStatus(usuarioId, id, request));
+    }
+
+    @PatchMapping("/{id}/prioridade")
+    public ResponseEntity<OcorrenciaResponse> atualizarPrioridade(
+            @PathVariable UUID id,
+            @Valid @RequestBody AtualizarPrioridadeOcorrenciaRequest request,
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        UUID usuarioId = UUID.fromString(jwt.getSubject());
+        return ResponseEntity.ok(ocorrenciaService.atualizarPrioridade(usuarioId, id, request));
     }
 
     @PostMapping
