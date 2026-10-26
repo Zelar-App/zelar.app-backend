@@ -1,0 +1,8 @@
+-- Migration V4: Definicao e Validacao da Carga Inicial do MVP (DB-06)
+-- 
+-- Diretrizes de Seguranca e Governanca (INF-07):
+-- 1. As contas de ADMINISTRADOR e CIDADAO nao sao provisionadas via migrations globais do Flyway
+--    para evitar a exposicao de credenciais estaticas em ambiente de producao.
+-- 2. O cadastro de usuarios ocorre via fluxo normal da aplicacao (/auth/register) ou infraestrutura de testes.
+-- 3. As 7 categorias do MVP (BURACO, ILUMINACAO, LIXO, ALAGAMENTO, CALCADA, SINALIZACAO, AMBIENTAL)
+--    são garantidas via constraint CHECK na tabela 'ocorrencia' (V2) e pelo Enum no backend Java.
