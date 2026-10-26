@@ -1,5 +1,6 @@
 package app.zelar.ocorrencia.service;
 
+import app.zelar.ocorrencia.dto.AtualizarStatusOcorrenciaRequest;
 import app.zelar.ocorrencia.dto.CriarOcorrenciaRequest;
 import app.zelar.ocorrencia.dto.ListarOcorrenciasRequest;
 import app.zelar.ocorrencia.dto.OcorrenciaPaginaResponse;
@@ -15,6 +16,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -70,6 +72,21 @@ public class OcorrenciaService {
         return (root, query, builder) -> usuario.getPerfil() == PerfilUsuario.ADMINISTRADOR
                 ? builder.conjunction()
                 : builder.equal(root.get("usuario").get("id"), usuarioId);
+    }
+
+    @Transactional
+    public OcorrenciaResponse atualizarStatus(UUID usuarioId, UUID ocorrenciaId,
+                                               AtualizarStatusOcorrenciaRequest request) {
+        Usuario usuario = usuarioRepository.findById(usuarioId)
+                .orElseThrow(() -> new BadCredentialsException("Usuário não autenticado."));
+        if (usuario.getPerfil() != PerfilUsuario.ADMINISTRADOR) {
+            throw new AccessDeniedException("Você não possui permissão para acessar este recurso.");
+        }
+
+        Ocorrencia ocorrencia = ocorrenciaRepository.findByIdParaAtualizacao(ocorrenciaId)
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Ocorrência não encontrada."));
+        ocorrencia.atualizarStatus(request.status());
+        return OcorrenciaResponse.from(ocorrencia);
     }
 
     @Transactional

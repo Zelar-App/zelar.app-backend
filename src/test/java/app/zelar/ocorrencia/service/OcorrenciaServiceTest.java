@@ -1,6 +1,9 @@
 package app.zelar.ocorrencia.service;
 
+import app.zelar.ocorrencia.dto.AtualizarStatusOcorrenciaRequest;
 import app.zelar.ocorrencia.dto.CriarOcorrenciaRequest;
+import app.zelar.ocorrencia.exception.TransicaoStatusInvalidaException;
+import app.zelar.shared.exception.RecursoNaoEncontradoException;
 import app.zelar.ocorrencia.dto.ListarOcorrenciasRequest;
 import app.zelar.ocorrencia.dto.OcorrenciaPaginaResponse;
 import app.zelar.ocorrencia.dto.OcorrenciaResponse;
@@ -17,11 +20,13 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -112,6 +117,80 @@ class OcorrenciaServiceTest {
                 new ListarOcorrenciasRequest(null, null, null, null)));
 
         verifyNoInteractions(ocorrenciaRepository);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"ENVIADA,EM_ANALISE", "EM_ANALISE,RESOLVIDA"})
+    void deveAtualizarStatusComAdministradorERegistroBloqueado(StatusOcorrencia origem,
+                                                              StatusOcorrencia destino) {
+        UUID administradorId = UUID.randomUUID();
+        UUID ocorrenciaId = UUID.randomUUID();
+        Usuario administrador = new Usuario("Admin", "admin@email.com", "hash", PerfilUsuario.ADMINISTRADOR, null);
+        Ocorrencia ocorrencia = new Ocorrencia(administrador, CategoriaOcorrencia.BURACO,
+                "Buraco na via", new Localizacao(-12.97, -38.50, null));
+        ReflectionTestUtils.setField(ocorrencia, "status", origem);
+        when(usuarioRepository.findById(administradorId)).thenReturn(Optional.of(administrador));
+        when(ocorrenciaRepository.findByIdParaAtualizacao(ocorrenciaId)).thenReturn(Optional.of(ocorrencia));
+
+        var response = ocorrenciaService.atualizarStatus(administradorId, ocorrenciaId,
+                new AtualizarStatusOcorrenciaRequest(destino));
+
+        assertEquals(destino, response.status());
+        assertNotNull(response.dataAtualizacao());
+        verify(ocorrenciaRepository).findByIdParaAtualizacao(ocorrenciaId);
+        verify(ocorrenciaRepository, never()).save(any());
+    }
+
+    @Test
+    void deveRecusarAtualizacaoPorCidadaoAntesDeBuscarOcorrencia() {
+        UUID usuarioId = UUID.randomUUID();
+        Usuario cidadao = new Usuario("Pessoa", "cidadao@email.com", "hash", PerfilUsuario.CIDADAO, null);
+        when(usuarioRepository.findById(usuarioId)).thenReturn(Optional.of(cidadao));
+
+        assertThrows(AccessDeniedException.class, () -> ocorrenciaService.atualizarStatus(usuarioId,
+                UUID.randomUUID(), new AtualizarStatusOcorrenciaRequest(StatusOcorrencia.EM_ANALISE)));
+
+        verifyNoInteractions(ocorrenciaRepository);
+    }
+
+    @Test
+    void deveRecusarAtualizacaoDeUsuarioRemovidoAntesDeBuscarOcorrencia() {
+        UUID usuarioId = UUID.randomUUID();
+        when(usuarioRepository.findById(usuarioId)).thenReturn(Optional.empty());
+
+        assertThrows(BadCredentialsException.class, () -> ocorrenciaService.atualizarStatus(usuarioId,
+                UUID.randomUUID(), new AtualizarStatusOcorrenciaRequest(StatusOcorrencia.EM_ANALISE)));
+
+        verifyNoInteractions(ocorrenciaRepository);
+    }
+
+    @Test
+    void deveInformarOcorrenciaInexistenteNaAtualizacaoAdministrativa() {
+        UUID usuarioId = UUID.randomUUID();
+        UUID ocorrenciaId = UUID.randomUUID();
+        Usuario administrador = new Usuario("Admin", "admin@email.com", "hash", PerfilUsuario.ADMINISTRADOR, null);
+        when(usuarioRepository.findById(usuarioId)).thenReturn(Optional.of(administrador));
+        when(ocorrenciaRepository.findByIdParaAtualizacao(ocorrenciaId)).thenReturn(Optional.empty());
+
+        assertThrows(RecursoNaoEncontradoException.class, () -> ocorrenciaService.atualizarStatus(usuarioId,
+                ocorrenciaId, new AtualizarStatusOcorrenciaRequest(StatusOcorrencia.EM_ANALISE)));
+    }
+
+    @Test
+    void devePreservarEstadoQuandoServicoReceberTransicaoInvalida() {
+        UUID usuarioId = UUID.randomUUID();
+        UUID ocorrenciaId = UUID.randomUUID();
+        Usuario administrador = new Usuario("Admin", "admin@email.com", "hash", PerfilUsuario.ADMINISTRADOR, null);
+        Ocorrencia ocorrencia = new Ocorrencia(administrador, CategoriaOcorrencia.BURACO,
+                "Buraco na via", new Localizacao(-12.97, -38.50, null));
+        when(usuarioRepository.findById(usuarioId)).thenReturn(Optional.of(administrador));
+        when(ocorrenciaRepository.findByIdParaAtualizacao(ocorrenciaId)).thenReturn(Optional.of(ocorrencia));
+
+        assertThrows(TransicaoStatusInvalidaException.class, () -> ocorrenciaService.atualizarStatus(usuarioId,
+                ocorrenciaId, new AtualizarStatusOcorrenciaRequest(StatusOcorrencia.RESOLVIDA)));
+
+        assertEquals(StatusOcorrencia.ENVIADA, ocorrencia.getStatus());
+        assertNull(ocorrencia.getDataAtualizacao());
     }
 
     @Test

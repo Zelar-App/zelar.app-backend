@@ -145,4 +145,16 @@ Cidadãos consultam somente as próprias ocorrências; administradores consultam
 
 Ocorrência inexistente ou fora do acesso do usuário retorna `404 Not Found` com a mesma mensagem `Ocorrência não encontrada.`, sem revelar se existe um registro de outra conta. Identificador inválido retorna 400 no formato `ApiError`. Ausência de autenticação, token inválido ou usuário removido retorna 401.
 
-O endpoint é somente de leitura. Fotografias e alterações de status/prioridade permanecem em suas respectivas tarefas. Os testes `OcorrenciaConsultaIntegrationTest` cobrem consulta pelo autor e por administrador, tentativa de acesso de outro cidadão, UUID inválido, recurso ausente, conta removida e uso do perfil atual mesmo com token administrativo ainda válido.
+O endpoint é somente de leitura. Fotografias e alterações de prioridade permanecem em suas respectivas tarefas; a atualização de status possui endpoint próprio, descrito abaixo. Os testes `OcorrenciaConsultaIntegrationTest` cobrem consulta pelo autor e por administrador, tentativa de acesso de outro cidadão, UUID inválido, recurso ausente, conta removida e uso do perfil atual mesmo com token administrativo ainda válido.
+
+## Atualização de status
+
+O fluxo do MVP é `ENVIADA → EM_ANALISE → RESOLVIDA`, sem salto de etapas, retorno, reabertura ou repetição do mesmo estado. A regra está registrada na DOC-01 do repositório de documentação. Somente administrador pode executar a mudança; o serviço confirma o perfil atual no banco.
+
+`PATCH /api/v1/ocorrencias/{id}/status` exige Bearer e um corpo JSON como `{"status":"EM_ANALISE"}`. Retorna `200 OK` com `OcorrenciaResponse`, atualizando `dataAtualizacao` e preservando os demais dados. Autor, prioridade, descrição e demais campos extras no JSON não alteram os atributos da ocorrência.
+
+Transição fora do fluxo retorna 409. Recurso ausente retorna 404. Cidadão recebe 403 antes da busca da ocorrência. Autenticação inválida ou conta removida retorna 401. Status ausente, desconhecido, JSON malformado ou identificador inválido retorna 400. Os erros seguem `ApiError`.
+
+A atualização é transacional e utiliza bloqueio da ocorrência durante a leitura para impedir que alterações concorrentes validem o mesmo estado antigo. O novo status é refletido nas consultas autorizadas, inclusive na listagem filtrada. A criação de uma conta administrativa segue o procedimento de provisionamento descrito acima; o cadastro público continua criando apenas cidadãos.
+
+Os testes de domínio verificam todas as transições entre os três estados. OcorrenciaStatusIntegrationTest cobre autorização, entrada inválida, persistência e reflexo na listagem. Para validação adicional em PostgreSQL separado, conferir também duas requisições simultâneas com o mesmo destino: apenas uma deve aplicar a transição, e a outra deve receber 409. As credenciais e a conta administrativa usadas como fixtures de validação não devem ser publicadas.

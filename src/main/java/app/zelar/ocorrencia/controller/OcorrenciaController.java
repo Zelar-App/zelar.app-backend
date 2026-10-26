@@ -1,5 +1,6 @@
 package app.zelar.ocorrencia.controller;
 
+import app.zelar.ocorrencia.dto.AtualizarStatusOcorrenciaRequest;
 import app.zelar.ocorrencia.dto.CriarOcorrenciaRequest;
 import app.zelar.ocorrencia.dto.ListarOcorrenciasRequest;
 import app.zelar.ocorrencia.dto.OcorrenciaPaginaResponse;
@@ -13,6 +14,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -47,6 +49,16 @@ public class OcorrenciaController {
     ) {
         UUID usuarioId = UUID.fromString(jwt.getSubject());
         return ResponseEntity.ok(ocorrenciaService.consultar(usuarioId, id));
+    }
+
+    @PatchMapping("/{id}/status")
+    public ResponseEntity<OcorrenciaResponse> atualizarStatus(
+            @PathVariable UUID id,
+            @Valid @RequestBody AtualizarStatusOcorrenciaRequest request,
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        UUID usuarioId = UUID.fromString(jwt.getSubject());
+        return ResponseEntity.ok(ocorrenciaService.atualizarStatus(usuarioId, id, request));
     }
 
     @PostMapping

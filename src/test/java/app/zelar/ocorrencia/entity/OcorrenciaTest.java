@@ -1,10 +1,13 @@
 package app.zelar.ocorrencia.entity;
 
+import app.zelar.ocorrencia.exception.TransicaoStatusInvalidaException;
 import app.zelar.usuario.entity.PerfilUsuario;
 import app.zelar.usuario.entity.Usuario;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -25,6 +28,47 @@ class OcorrenciaTest {
         assertNull(ocorrencia.getPrioridade());
         assertNull(ocorrencia.getDataAtualizacao());
         assertNotNull(ocorrencia.getDataCriacao());
+    }
+
+    @Test
+    void deveAvancarStatusSemAlterarDataDeCriacaoOuAutor() {
+        Ocorrencia ocorrencia = new Ocorrencia(usuario, CategoriaOcorrencia.BURACO,
+                "Buraco na via", localizacao);
+        var dataCriacao = ocorrencia.getDataCriacao();
+
+        ocorrencia.atualizarStatus(StatusOcorrencia.EM_ANALISE);
+        assertEquals(StatusOcorrencia.EM_ANALISE, ocorrencia.getStatus());
+        assertNotNull(ocorrencia.getDataAtualizacao());
+        ocorrencia.atualizarStatus(StatusOcorrencia.RESOLVIDA);
+
+        assertEquals(StatusOcorrencia.RESOLVIDA, ocorrencia.getStatus());
+        assertEquals(dataCriacao, ocorrencia.getDataCriacao());
+        assertSame(usuario, ocorrencia.getUsuario());
+        assertNull(ocorrencia.getPrioridade());
+    }
+
+    @ParameterizedTest
+    @CsvSource({"ENVIADA,ENVIADA", "ENVIADA,RESOLVIDA", "EM_ANALISE,ENVIADA",
+            "EM_ANALISE,EM_ANALISE", "RESOLVIDA,ENVIADA", "RESOLVIDA,EM_ANALISE", "RESOLVIDA,RESOLVIDA"})
+    void deveRecusarTransicaoInvalidaSemAlterarEstado(StatusOcorrencia origem, StatusOcorrencia destino) {
+        Ocorrencia ocorrencia = new Ocorrencia(usuario, CategoriaOcorrencia.BURACO,
+                "Buraco na via", localizacao);
+        ReflectionTestUtils.setField(ocorrencia, "status", origem);
+
+        assertThrows(TransicaoStatusInvalidaException.class, () -> ocorrencia.atualizarStatus(destino));
+
+        assertEquals(origem, ocorrencia.getStatus());
+        assertNull(ocorrencia.getDataAtualizacao());
+    }
+
+    @Test
+    void deveRecusarStatusNuloSemAlterarOcorrencia() {
+        Ocorrencia ocorrencia = new Ocorrencia(usuario, CategoriaOcorrencia.BURACO,
+                "Buraco na via", localizacao);
+
+        assertThrows(NullPointerException.class, () -> ocorrencia.atualizarStatus(null));
+        assertEquals(StatusOcorrencia.ENVIADA, ocorrencia.getStatus());
+        assertNull(ocorrencia.getDataAtualizacao());
     }
 
     @ParameterizedTest
