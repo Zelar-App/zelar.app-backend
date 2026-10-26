@@ -2,6 +2,7 @@ package app.zelar.ocorrencia.entity;
 
 import app.zelar.ocorrencia.exception.TransicaoStatusInvalidaException;
 import app.zelar.usuario.entity.Usuario;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
@@ -14,6 +15,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+
 import org.springframework.util.Assert;
 
 import java.time.LocalDateTime;
@@ -76,6 +78,15 @@ public class Ocorrencia {
             throw new TransicaoStatusInvalidaException();
         }
         this.status = novoStatus;
+        this.dataAtualizacao = LocalDateTime.now();
+    }
+
+    public void atualizarPrioridade(PrioridadeOcorrencia novaPrioridade) {
+        Objects.requireNonNull(novaPrioridade, "A prioridade é obrigatória.");
+        if (this.prioridade == novaPrioridade) {
+            return;
+        }
+        this.prioridade = novaPrioridade;
         this.dataAtualizacao = LocalDateTime.now();
     }
 

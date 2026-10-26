@@ -1,40 +1,42 @@
 package app.zelar.ocorrencia.service;
 
+import app.zelar.ocorrencia.dto.AtualizarPrioridadeOcorrenciaRequest;
 import app.zelar.ocorrencia.dto.AtualizarStatusOcorrenciaRequest;
 import app.zelar.ocorrencia.dto.CriarOcorrenciaRequest;
-import app.zelar.ocorrencia.exception.TransicaoStatusInvalidaException;
-import app.zelar.shared.exception.RecursoNaoEncontradoException;
 import app.zelar.ocorrencia.dto.ListarOcorrenciasRequest;
 import app.zelar.ocorrencia.dto.OcorrenciaPaginaResponse;
 import app.zelar.ocorrencia.dto.OcorrenciaResponse;
-import app.zelar.shared.exception.RecursoNaoEncontradoException;
-import app.zelar.ocorrencia.entity.Localizacao;
 import app.zelar.ocorrencia.entity.CategoriaOcorrencia;
+import app.zelar.ocorrencia.entity.Localizacao;
 import app.zelar.ocorrencia.entity.Ocorrencia;
+import app.zelar.ocorrencia.entity.PrioridadeOcorrencia;
 import app.zelar.ocorrencia.entity.StatusOcorrencia;
+import app.zelar.ocorrencia.exception.TransicaoStatusInvalidaException;
 import app.zelar.ocorrencia.repository.OcorrenciaRepository;
+import app.zelar.shared.exception.RecursoNaoEncontradoException;
 import app.zelar.usuario.entity.PerfilUsuario;
 import app.zelar.usuario.entity.Usuario;
 import app.zelar.usuario.repository.UsuarioRepository;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.security.access.AccessDeniedException;
-import org.springframework.security.authentication.BadCredentialsException;
-import org.springframework.test.util.ReflectionTestUtils;
-
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.Optional;
@@ -250,5 +252,68 @@ class OcorrenciaServiceTest {
         assertThrows(BadCredentialsException.class, () -> ocorrenciaService.criar(usuarioId, request));
 
         verifyNoInteractions(ocorrenciaRepository);
+    }
+    @ParameterizedTest
+    @EnumSource(PrioridadeOcorrencia.class)
+    void deveAtualizarPrioridadeComoAdministradorComLeituraBloqueada(PrioridadeOcorrencia prioridade) {
+        UUID usuarioId = UUID.randomUUID();
+        UUID ocorrenciaId = UUID.randomUUID();
+        Usuario administrador = new Usuario("Admin", "admin@email.com", "hash", PerfilUsuario.ADMINISTRADOR, null);
+        Ocorrencia ocorrencia = new Ocorrencia(administrador, CategoriaOcorrencia.BURACO,
+                "Buraco na via", new Localizacao(0.0, 0.0, null));
+        ReflectionTestUtils.setField(ocorrencia, "id", ocorrenciaId);
+        when(usuarioRepository.findById(usuarioId)).thenReturn(Optional.of(administrador));
+        when(ocorrenciaRepository.findByIdParaAtualizacao(ocorrenciaId)).thenReturn(Optional.of(ocorrencia));
+
+        OcorrenciaResponse response = ocorrenciaService.atualizarPrioridade(usuarioId, ocorrenciaId,
+                new AtualizarPrioridadeOcorrenciaRequest(prioridade));
+
+        assertEquals(ocorrenciaId, response.id());
+        assertEquals(prioridade, response.prioridade());
+        assertEquals(StatusOcorrencia.ENVIADA, response.status());
+        assertNotNull(response.dataAtualizacao());
+        var ordem = inOrder(usuarioRepository, ocorrenciaRepository);
+        ordem.verify(usuarioRepository).findById(usuarioId);
+        ordem.verify(ocorrenciaRepository).findByIdParaAtualizacao(ocorrenciaId);
+        verify(ocorrenciaRepository, never()).save(any());
+    }
+
+    @Test
+    void deveRecusarPrioridadeParaCidadaoAntesDeConsultarOcorrencia() {
+        UUID usuarioId = UUID.randomUUID();
+        Usuario cidadao = new Usuario("João", "joao@email.com", "hash", PerfilUsuario.CIDADAO, null);
+        when(usuarioRepository.findById(usuarioId)).thenReturn(Optional.of(cidadao));
+
+        assertThrows(AccessDeniedException.class, () -> ocorrenciaService.atualizarPrioridade(usuarioId,
+                UUID.randomUUID(), new AtualizarPrioridadeOcorrenciaRequest(PrioridadeOcorrencia.ALTA)));
+
+        verifyNoInteractions(ocorrenciaRepository);
+    }
+
+    @Test
+    void deveRecusarPrioridadeParaUsuarioRemovidoAntesDeConsultarOcorrencia() {
+        UUID usuarioId = UUID.randomUUID();
+        when(usuarioRepository.findById(usuarioId)).thenReturn(Optional.empty());
+
+        assertThrows(BadCredentialsException.class, () -> ocorrenciaService.atualizarPrioridade(usuarioId,
+                UUID.randomUUID(), new AtualizarPrioridadeOcorrenciaRequest(PrioridadeOcorrencia.ALTA)));
+
+        verifyNoInteractions(ocorrenciaRepository);
+    }
+
+    @Test
+    void deveRetornar404NaAtualizacaoDePrioridadeQuandoOcorrenciaNaoExistir() {
+        UUID usuarioId = UUID.randomUUID();
+        UUID ocorrenciaId = UUID.randomUUID();
+        Usuario admin = new Usuario("Admin", "admin@email.com", "hash", PerfilUsuario.ADMINISTRADOR, null);
+        when(usuarioRepository.findById(usuarioId)).thenReturn(Optional.of(admin));
+        when(ocorrenciaRepository.findByIdParaAtualizacao(ocorrenciaId)).thenReturn(Optional.empty());
+
+        RecursoNaoEncontradoException exception = assertThrows(RecursoNaoEncontradoException.class,
+                () -> ocorrenciaService.atualizarPrioridade(usuarioId, ocorrenciaId,
+                        new AtualizarPrioridadeOcorrenciaRequest(PrioridadeOcorrencia.ALTA)));
+
+        assertEquals("Ocorrência não encontrada.", exception.getMessage());
+        verify(ocorrenciaRepository, never()).save(any());
     }
 }

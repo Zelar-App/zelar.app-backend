@@ -3,12 +3,20 @@ package app.zelar.ocorrencia.entity;
 import app.zelar.ocorrencia.exception.TransicaoStatusInvalidaException;
 import app.zelar.usuario.entity.PerfilUsuario;
 import app.zelar.usuario.entity.Usuario;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
-import org.springframework.test.util.ReflectionTestUtils;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.test.util.ReflectionTestUtils;
+
+import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -108,5 +116,61 @@ class OcorrenciaTest {
         assertThrows(IllegalArgumentException.class, () -> new Localizacao(0.0, 0.0, "a".repeat(256)));
         assertDoesNotThrow(() -> new Localizacao(-90.0, -180.0, "a".repeat(255)));
         assertDoesNotThrow(() -> new Localizacao(90.0, 180.0, null));
+    }
+    @ParameterizedTest
+    @EnumSource(PrioridadeOcorrencia.class)
+    void deveAtribuirPrioridadeSemAlterarDemaisDados(PrioridadeOcorrencia prioridade) {
+        Ocorrencia ocorrencia = new Ocorrencia(usuario, CategoriaOcorrencia.BURACO,
+                "Buraco na via", localizacao);
+        LocalDateTime criacao = ocorrencia.getDataCriacao();
+
+        ocorrencia.atualizarPrioridade(prioridade);
+
+        assertEquals(prioridade, ocorrencia.getPrioridade());
+        assertNotNull(ocorrencia.getDataAtualizacao());
+        assertSame(usuario, ocorrencia.getUsuario());
+        assertSame(localizacao, ocorrencia.getLocalizacao());
+        assertEquals(CategoriaOcorrencia.BURACO, ocorrencia.getCategoria());
+        assertEquals("Buraco na via", ocorrencia.getDescricao());
+        assertEquals(StatusOcorrencia.ENVIADA, ocorrencia.getStatus());
+        assertEquals(criacao, ocorrencia.getDataCriacao());
+    }
+
+    @ParameterizedTest
+    @MethodSource("mudancasDePrioridade")
+    void devePermitirTodasAsMudancasEPreservarDataNaRepeticao(
+            PrioridadeOcorrencia origem, PrioridadeOcorrencia destino) {
+        Ocorrencia ocorrencia = new Ocorrencia(usuario, CategoriaOcorrencia.BURACO,
+                "Buraco na via", localizacao);
+        ocorrencia.atualizarPrioridade(origem);
+        LocalDateTime anterior = LocalDateTime.of(2026, 10, 20, 12, 0);
+        ReflectionTestUtils.setField(ocorrencia, "dataAtualizacao", anterior);
+
+        ocorrencia.atualizarPrioridade(destino);
+
+        assertEquals(destino, ocorrencia.getPrioridade());
+        if (origem == destino) {
+            assertEquals(anterior, ocorrencia.getDataAtualizacao());
+        } else {
+            assertTrue(ocorrencia.getDataAtualizacao().isAfter(anterior));
+        }
+    }
+
+    static Stream<Arguments> mudancasDePrioridade() {
+        return Arrays.stream(PrioridadeOcorrencia.values()).flatMap(origem ->
+                Arrays.stream(PrioridadeOcorrencia.values()).map(destino -> Arguments.of(origem, destino)));
+    }
+
+    @Test
+    void deveRecusarPrioridadeNulaSemAlterarEstadoAnterior() {
+        Ocorrencia ocorrencia = new Ocorrencia(usuario, CategoriaOcorrencia.BURACO,
+                "Buraco na via", localizacao);
+        ocorrencia.atualizarPrioridade(PrioridadeOcorrencia.ALTA);
+        LocalDateTime anterior = ocorrencia.getDataAtualizacao();
+
+        assertThrows(NullPointerException.class, () -> ocorrencia.atualizarPrioridade(null));
+
+        assertEquals(PrioridadeOcorrencia.ALTA, ocorrencia.getPrioridade());
+        assertEquals(anterior, ocorrencia.getDataAtualizacao());
     }
 }
