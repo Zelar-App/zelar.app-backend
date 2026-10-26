@@ -3,6 +3,7 @@ package app.zelar.ocorrencia.controller;
 import app.zelar.ocorrencia.dto.AtualizarPrioridadeOcorrenciaRequest;
 import app.zelar.ocorrencia.dto.AtualizarStatusOcorrenciaRequest;
 import app.zelar.ocorrencia.dto.CriarOcorrenciaRequest;
+import app.zelar.ocorrencia.dto.OcorrenciaIndicadoresResponse;
 import app.zelar.ocorrencia.dto.ListarOcorrenciasRequest;
 import app.zelar.ocorrencia.dto.OcorrenciaPaginaResponse;
 import app.zelar.ocorrencia.dto.OcorrenciaResponse;
@@ -43,6 +44,14 @@ public class OcorrenciaController {
     ) {
         UUID usuarioId = UUID.fromString(jwt.getSubject());
         return ResponseEntity.ok(ocorrenciaService.listar(usuarioId, request));
+    }
+
+    @GetMapping("/indicadores")
+    public ResponseEntity<OcorrenciaIndicadoresResponse> consultarIndicadores(
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        UUID usuarioId = UUID.fromString(jwt.getSubject());
+        return ResponseEntity.ok(ocorrenciaService.consultarIndicadores(usuarioId));
     }
 
     @GetMapping("/{id}")
