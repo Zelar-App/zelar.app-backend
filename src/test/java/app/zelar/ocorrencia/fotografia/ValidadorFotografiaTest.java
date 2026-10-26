@@ -1,5 +1,8 @@
 package app.zelar.ocorrencia.fotografia;
 
+import app.zelar.ocorrencia.dto.FotografiaValidada;
+import app.zelar.ocorrencia.exception.FotografiaInvalidaException;
+import app.zelar.ocorrencia.service.ValidadorFotografia;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
