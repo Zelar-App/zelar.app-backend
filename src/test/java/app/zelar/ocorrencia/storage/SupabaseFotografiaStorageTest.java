@@ -29,13 +29,23 @@ class SupabaseFotografiaStorageTest {
     private static final String CHAVE = "12345678-1234-4234-8234-123456789abc.png";
     private static final byte[] CONTEUDO = {1, 2, 3};
     private MockRestServiceServer servidor;
+    private RestClient.Builder builder;
     private FotografiaStorage storage;
 
     @BeforeEach
     void configurar() {
-        RestClient.Builder builder = RestClient.builder();
+        builder = RestClient.builder();
         servidor = MockRestServiceServer.bindTo(builder).build();
         storage = new SupabaseFotografiaStorage(builder, URI.create(BASE), SECRET, BUCKET);
+    }
+
+    @Test
+    void aceitaUrlDoProjetoComBarraFinalSemDuplicarCaminho() {
+        storage = new SupabaseFotografiaStorage(builder, URI.create(BASE + "/"), SECRET, BUCKET);
+        servidor.expect(requestTo(BASE + "/storage/v1/object/authenticated/" + BUCKET + "/" + CHAVE))
+                .andRespond(withSuccess(CONTEUDO, MediaType.IMAGE_PNG));
+        assertArrayEquals(CONTEUDO, storage.ler(CHAVE));
+        servidor.verify();
     }
 
     @Test
