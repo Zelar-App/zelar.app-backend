@@ -1,5 +1,6 @@
 package app.zelar.shared.exception;
 
+import app.zelar.ocorrencia.exception.TransicaoStatusInvalidaException;
 import app.zelar.usuario.exception.EmailJaCadastradoException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.LocalDateTime;
@@ -27,6 +28,14 @@ public class GlobalExceptionHandler {
                 .header(HttpHeaders.WWW_AUTHENTICATE, "Bearer")
                 .body(new ApiError(HttpStatus.UNAUTHORIZED.value(), HttpStatus.UNAUTHORIZED.getReasonPhrase(),
                         exception.getMessage(), request.getRequestURI(), LocalDateTime.now()));
+    }
+
+    @ExceptionHandler(TransicaoStatusInvalidaException.class)
+    public ResponseEntity<ApiError> handleTransicaoStatusInvalida(
+            TransicaoStatusInvalidaException exception,
+            HttpServletRequest request
+    ) {
+        return criarResposta(HttpStatus.CONFLICT, exception.getMessage(), request);
     }
 
     @ExceptionHandler(EmailJaCadastradoException.class)
