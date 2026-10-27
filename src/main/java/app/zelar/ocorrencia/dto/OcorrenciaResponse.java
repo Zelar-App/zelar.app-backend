@@ -19,8 +19,22 @@ public record OcorrenciaResponse(
         StatusOcorrencia status,
         PrioridadeOcorrencia prioridade,
         LocalDateTime dataCriacao,
-        LocalDateTime dataAtualizacao
+        LocalDateTime dataAtualizacao,
+        boolean possuiFotografia
 ) {
+
+    public OcorrenciaResponse(UUID id, UUID usuarioId, CategoriaOcorrencia categoria, String descricao,
+                              Double latitude, Double longitude, String enderecoAproximado,
+                              StatusOcorrencia status, PrioridadeOcorrencia prioridade,
+                              LocalDateTime dataCriacao, LocalDateTime dataAtualizacao) {
+        this(id, usuarioId, categoria, descricao, latitude, longitude, enderecoAproximado,
+                status, prioridade, dataCriacao, dataAtualizacao, false);
+    }
+
+    public OcorrenciaResponse comFotografia(boolean possuiFotografia) {
+        return new OcorrenciaResponse(id, usuarioId, categoria, descricao, latitude, longitude,
+                enderecoAproximado, status, prioridade, dataCriacao, dataAtualizacao, possuiFotografia);
+    }
 
     public static OcorrenciaResponse from(Ocorrencia ocorrencia) {
         return new OcorrenciaResponse(

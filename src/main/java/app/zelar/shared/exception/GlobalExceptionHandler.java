@@ -1,6 +1,11 @@
 package app.zelar.shared.exception;
 
 import app.zelar.ocorrencia.exception.TransicaoStatusInvalidaException;
+import app.zelar.ocorrencia.exception.FotografiaInvalidaException;
+import app.zelar.ocorrencia.exception.FotografiaConflitoException;
+import app.zelar.ocorrencia.exception.FotografiaStorageException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import app.zelar.usuario.exception.EmailJaCadastradoException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.LocalDateTime;
@@ -18,6 +23,46 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(FotografiaInvalidaException.class)
+    public ResponseEntity<ApiError> handleFotografiaInvalida(
+            FotografiaInvalidaException exception,
+            HttpServletRequest request
+    ) {
+        return criarResposta(HttpStatus.BAD_REQUEST, exception.getMessage(), request);
+    }
+
+    @ExceptionHandler(FotografiaConflitoException.class)
+    public ResponseEntity<ApiError> handleFotografiaConflitante(
+            FotografiaConflitoException exception,
+            HttpServletRequest request
+    ) {
+        return criarResposta(HttpStatus.CONFLICT, exception.getMessage(), request);
+    }
+
+    @ExceptionHandler(FotografiaStorageException.class)
+    public ResponseEntity<ApiError> handleStorageIndisponivel(
+            FotografiaStorageException exception,
+            HttpServletRequest request
+    ) {
+        return criarResposta(HttpStatus.SERVICE_UNAVAILABLE, exception.getMessage(), request);
+    }
+
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    public ResponseEntity<ApiError> handleArquivoAusente(
+            MissingServletRequestPartException exception,
+            HttpServletRequest request
+    ) {
+        return criarResposta(HttpStatus.BAD_REQUEST, "Envie a fotografia no campo 'foto'.", request);
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiError> handleUploadExcedido(
+            MaxUploadSizeExceededException exception,
+            HttpServletRequest request
+    ) {
+        return criarResposta(HttpStatus.PAYLOAD_TOO_LARGE, "A fotografia deve possuir no máximo 5 MiB.", request);
+    }
 
     @ExceptionHandler(BadCredentialsException.class)
     public ResponseEntity<ApiError> handleCredenciaisInvalidas(

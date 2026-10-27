@@ -14,6 +14,7 @@ import app.zelar.ocorrencia.entity.PrioridadeOcorrencia;
 import app.zelar.ocorrencia.entity.StatusOcorrencia;
 import app.zelar.ocorrencia.exception.TransicaoStatusInvalidaException;
 import app.zelar.ocorrencia.repository.OcorrenciaRepository;
+import app.zelar.ocorrencia.repository.AnexoRepository;
 import app.zelar.shared.exception.RecursoNaoEncontradoException;
 import app.zelar.usuario.entity.PerfilUsuario;
 import app.zelar.usuario.entity.Usuario;
@@ -55,11 +56,14 @@ class OcorrenciaServiceTest {
     @Mock
     private UsuarioRepository usuarioRepository;
 
+    @Mock
+    private AnexoRepository anexoRepository;
+
     private OcorrenciaService ocorrenciaService;
 
     @BeforeEach
     void setUp() {
-        ocorrenciaService = new OcorrenciaService(ocorrenciaRepository, usuarioRepository);
+        ocorrenciaService = new OcorrenciaService(ocorrenciaRepository, usuarioRepository, anexoRepository);
     }
 
     @ParameterizedTest
