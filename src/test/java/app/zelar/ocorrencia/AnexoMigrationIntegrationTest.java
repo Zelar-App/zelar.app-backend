@@ -1,5 +1,6 @@
 package app.zelar.ocorrencia;
 
+import com.zaxxer.hikari.HikariDataSource;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -229,23 +230,31 @@ class AnexoMigrationIntegrationTest {
     @Test
     void deveAtualizarBancoAnteriorPreservandoOcorrenciaSemFoto() {
         String schema = "db09_upgrade_" + UUID.randomUUID().toString().replace("-", "");
-        Flyway anterior = Flyway.configure().dataSource(URL, USUARIO, SENHA).schemas(schema)
-                .locations("classpath:db/migration").target("4").load();
-        try {
-            anterior.migrate();
-            UUID autor = UUID.randomUUID();
-            UUID ocorrencia = UUID.randomUUID();
-            criarUsuarioEOcorrencia(schema + ".", autor, ocorrencia);
-            Flyway atual = Flyway.configure().dataSource(URL, USUARIO, SENHA).schemas(schema)
-                    .locations("classpath:db/migration").load();
-            assertEquals(1, atual.migrate().migrationsExecuted);
-            atual.validate();
-            assertEquals(0, atual.migrate().migrationsExecuted);
-            assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM " + schema + ".ocorrencia WHERE id = ?",
-                    Integer.class, ocorrencia));
-            assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM " + schema + ".anexo", Integer.class));
-        } finally {
-            jdbc.execute("DROP SCHEMA IF EXISTS " + schema + " CASCADE");
+        String prefixo = "\"" + schema + "\".";
+        try (HikariDataSource conexoesUpgrade = new HikariDataSource()) {
+            conexoesUpgrade.setJdbcUrl(URL);
+            conexoesUpgrade.setUsername(USUARIO);
+            conexoesUpgrade.setPassword(SENHA);
+            conexoesUpgrade.setMaximumPoolSize(5);
+            JdbcTemplate bancoUpgrade = new JdbcTemplate(conexoesUpgrade);
+            Flyway anterior = Flyway.configure().dataSource(conexoesUpgrade).schemas(schema)
+                    .locations("classpath:db/migration").target("4").load();
+            try {
+                anterior.migrate();
+                UUID autor = UUID.randomUUID();
+                UUID ocorrencia = UUID.randomUUID();
+                criarUsuarioEOcorrencia(bancoUpgrade, prefixo, autor, ocorrencia);
+                Flyway atual = Flyway.configure().dataSource(conexoesUpgrade).schemas(schema)
+                        .locations("classpath:db/migration").load();
+                assertEquals(1, atual.migrate().migrationsExecuted);
+                atual.validate();
+                assertEquals(0, atual.migrate().migrationsExecuted);
+                assertEquals(1, bancoUpgrade.queryForObject("SELECT COUNT(*) FROM " + prefixo + "ocorrencia WHERE id = ?",
+                        Integer.class, ocorrencia));
+                assertEquals(0, bancoUpgrade.queryForObject("SELECT COUNT(*) FROM " + prefixo + "anexo", Integer.class));
+            } finally {
+                bancoUpgrade.execute("DROP SCHEMA IF EXISTS \"" + schema + "\" CASCADE");
+            }
         }
     }
 
@@ -259,9 +268,13 @@ class AnexoMigrationIntegrationTest {
     }
 
     private void criarUsuarioEOcorrencia(String prefixo, UUID autor, UUID ocorrencia) {
-        jdbc.update("INSERT INTO " + prefixo + "usuario (id, nome, email, senha_hash, papel) VALUES (?, ?, ?, ?, ?)",
+        criarUsuarioEOcorrencia(jdbc, prefixo, autor, ocorrencia);
+    }
+
+    private void criarUsuarioEOcorrencia(JdbcTemplate banco, String prefixo, UUID autor, UUID ocorrencia) {
+        banco.update("INSERT INTO " + prefixo + "usuario (id, nome, email, senha_hash, papel) VALUES (?, ?, ?, ?, ?)",
                 autor, "Usuário de teste", autor + "@example.com", "hash-exclusivo-de-teste", "CIDADAO");
-        jdbc.update("INSERT INTO " + prefixo + "ocorrencia "
+        banco.update("INSERT INTO " + prefixo + "ocorrencia "
                         + "(id, descricao, status, categoria, latitude, longitude, usuario_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 ocorrencia, "Ocorrência de teste", "ENVIADA", "BURACO", 0, 0, autor);
     }
