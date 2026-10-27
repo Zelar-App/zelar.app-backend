@@ -52,6 +52,9 @@ jobs:
       DB09_TEST_URL: jdbc:postgresql://localhost:5432/zelar_migrations_test
       DB09_TEST_USERNAME: zelar_test
       DB09_TEST_PASSWORD: postgres-ci-only
+      BE13_TEST_URL: jdbc:postgresql://localhost:5432/zelar_migrations_test
+      BE13_TEST_USERNAME: zelar_test
+      BE13_TEST_PASSWORD: postgres-ci-only
     steps:
       - name: Checkout do codigo
         uses: actions/checkout@v4
@@ -64,4 +67,4 @@ jobs:
       - name: Permitir execucao do Maven Wrapper
         run: chmod +x mvnw
       - name: Validar migrations e constraints em PostgreSQL
-        run: ./mvnw -B -Dtest=AnexoMigrationIntegrationTest test
+        run: ./mvnw -B -Dtest=AnexoMigrationIntegrationTest,FotografiaIntegrationTest test
