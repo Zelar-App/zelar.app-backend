@@ -13,6 +13,8 @@ import jakarta.persistence.UniqueConstraint;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
+import java.util.Objects;
+import org.springframework.util.Assert;
 
 @Entity
 @Table(name = "anexo", uniqueConstraints = {
@@ -50,7 +52,10 @@ public class Anexo {
     }
 
     public Anexo(UUID ocorrenciaId, String bucket, FotografiaValidada fotografia, LocalDateTime instante) {
-        this.ocorrenciaId = ocorrenciaId;
+        this.ocorrenciaId = Objects.requireNonNull(ocorrenciaId, "A ocorrência é obrigatória.");
+        Assert.hasText(bucket, "O bucket é obrigatório.");
+        Objects.requireNonNull(fotografia, "A fotografia é obrigatória.");
+        Objects.requireNonNull(instante, "O instante é obrigatório.");
         this.bucket = bucket;
         this.chaveObjeto = UUID.randomUUID() + "." + fotografia.extensao();
         this.tipoConteudo = fotografia.tipoConteudo();
@@ -63,6 +68,7 @@ public class Anexo {
     }
 
     public void disponibilizar(LocalDateTime instante) {
+        Objects.requireNonNull(instante, "O instante é obrigatório.");
         if (estadoUpload != EstadoUpload.PENDENTE) {
             throw new IllegalStateException("A reserva não está pendente de envio.");
         }
@@ -71,6 +77,7 @@ public class Anexo {
     }
 
     public void aguardarLimpeza(LocalDateTime instante) {
+        Objects.requireNonNull(instante, "O instante é obrigatório.");
         if (estadoUpload == EstadoUpload.DISPONIVEL) {
             throw new IllegalStateException("Uma fotografia disponível não pode ser compensada como envio pendente.");
         }
@@ -78,14 +85,44 @@ public class Anexo {
         dataAtualizacao = instante;
     }
 
-    public UUID getId() { return id; }
-    public UUID getOcorrenciaId() { return ocorrenciaId; }
-    public String getBucket() { return bucket; }
-    public String getChaveObjeto() { return chaveObjeto; }
-    public String getTipoConteudo() { return tipoConteudo; }
-    public long getTamanhoBytes() { return tamanhoBytes; }
-    public int getLargura() { return largura; }
-    public int getAltura() { return altura; }
-    public EstadoUpload getEstadoUpload() { return estadoUpload; }
-    public LocalDateTime getDataAtualizacao() { return dataAtualizacao; }
+    public UUID getId() {
+        return id;
+    }
+
+    public UUID getOcorrenciaId() {
+        return ocorrenciaId;
+    }
+
+    public String getBucket() {
+        return bucket;
+    }
+
+    public String getChaveObjeto() {
+        return chaveObjeto;
+    }
+
+    public String getTipoConteudo() {
+        return tipoConteudo;
+    }
+
+    public long getTamanhoBytes() {
+        return tamanhoBytes;
+    }
+
+    public int getLargura() {
+        return largura;
+    }
+
+    public int getAltura() {
+        return altura;
+    }
+
+    public EstadoUpload getEstadoUpload() {
+        return estadoUpload;
+    }
+
+    public LocalDateTime getDataAtualizacao() {
+        return dataAtualizacao;
+    }
+
 }
