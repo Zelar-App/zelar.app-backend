@@ -195,80 +195,75 @@ Erros no formato `ApiError`: 401 para autenticação inválida ou conta removida
 
 Validação da BE-15: 15 testes novos (12 de integração e 3 de serviço), com 174 testes aprovados na suíte completa desta branch. PostgreSQL 17 isolado validou banco vazio, criação via API, mudanças de status persistidas como fixtures, múltiplos autores, escopo global, autorização e reinício. Execução local em Java 24, compilando para Java 21; Java 21 e imagem Docker permanecem para validação no CI.
 
-## Fotografias de ocorrências — preparação da BE-13
+## Fotografias de ocorrências (BE-13)
 
-Esta branch prepara validação, autorização e acesso ao Supabase Storage, sem migration, entidade de anexo ou endpoint de fotografias. A BE-13 permanece em andamento. O contrato abaixo é uma proposta para alinhamento com a equipe responsável pela DB-09; a integração completa depende desse alinhamento e da migration aprovada.
+O backend implementa envio e consulta de uma fotografia opcional por ocorrência, com metadados da DB-09 e arquivo em bucket privado do Supabase Storage. A criação de ocorrência continua aceitando JSON e não exige foto.
 
-### Componentes preparados
+### Endpoints
 
-- `ValidadorFotografia`: aceita JPEG/PNG de até 5 MiB (5.242.880 bytes), verifica o formato pelo conteúdo, exige correspondência com o MIME declarado e decodifica a imagem. Limita cada lado a 8192 pixels e a área a 16 milhões de pixels antes da decodificação. Regrava a imagem sem os metadados e os bytes adicionais do arquivo recebido; o resultado também deve respeitar 5 MiB. O nome original não determina o caminho de armazenamento.
-- `FotografiaValidada`: transporta conteúdo, MIME, extensão, tamanho e dimensões; copia o vetor de bytes na entrada e na saída.
-- `FotografiaAcessoService`: reutiliza `OcorrenciaService.consultar`, preservando a identidade, o perfil atual e a visibilidade já aplicados às ocorrências. Somente o autor pode enviar; autor e administrador autorizado podem consultar. Ocorrência fora do escopo continua retornando o mesmo erro de recurso ausente.
-- `FotografiaStorage` e `SupabaseFotografiaStorage`: isolam envio, leitura privada e exclusão técnica para compensação. O adaptador recebe uma chave UUID com extensão correspondente, conhecida antes do envio, e recusa caminhos arbitrários e sobrescrita. A leitura tem limite de bytes, independentemente do tamanho declarado pelo provedor. Falhas de infraestrutura usam uma mensagem controlada, sem corpo da resposta ou credencial.
-
-O adaptador **ainda não é um bean** e nenhuma chamada de armazenamento está ligada aos fluxos HTTP. Isso permite integrar a preparação sem exigir credenciais e sem mudar a criação/listagem de ocorrências. Os testes HTTP usam servidor simulado; não validam um bucket real. As novas exceções só receberão mapeamento em `ApiError` quando os endpoints forem implementados.
-
-### Proposta de API após a DB-09
-
-A criação existente permanece JSON e aceita ocorrência sem fotografia. Quando houver foto, o cliente cria a ocorrência primeiro e depois envia o anexo:
-
-| Operação proposta | Contrato |
+| Operação | Contrato |
 | --- | --- |
-| `POST /api/v1/ocorrencias/{id}/fotografia` | Bearer do Zelar; somente autor; `multipart/form-data`, campo `foto`; uma fotografia por ocorrência; sem substituição no MVP; sucesso 201 |
-| `GET /api/v1/ocorrencias/{id}/fotografia` | Bearer do Zelar; autor ou administrador; conteúdo binário JPEG/PNG; sucesso 200; sem URL pública do bucket |
+| `POST /api/v1/ocorrencias/{id}/fotografia` | Bearer do Zelar, somente autor, multipart com campo `foto`. Retorna 201 e `Location` do recurso, com JSON contendo `id`, `tipoConteudo`, `tamanhoBytes`, `largura` e `altura`. Sem substituição no MVP. |
+| `GET /api/v1/ocorrencias/{id}/fotografia` | Bearer do Zelar, autor ou administrador autorizado pelo perfil atual no banco. Retorna bytes JPEG/PNG, `Cache-Control: no-store, private` e `X-Content-Type-Options: nosniff`. |
 
-Erros previstos para a implementação HTTP: 400 para conteúdo inválido; 401 para autenticação inválida/conta removida; 403 quando um administrador tenta anexar em nome de outro autor; 404 para ocorrência fora do escopo, inexistente ou fotografia ausente; 409 para fotografia já vinculada; 413 para excesso de tamanho na camada multipart; 503 para indisponibilidade do armazenamento. O limite multipart da requisição precisa comportar os cabeçalhos além dos 5 MiB do arquivo. As respostas de leitura devem definir MIME conhecido, `X-Content-Type-Options: nosniff` e cache privado sem armazenamento.
+As respostas de ocorrência incluem `possuiFotografia`, verdadeiro somente quando o vínculo está `DISPONIVEL`. Detalhe, listagem e atualizações administrativas preservam esse indicador. A listagem verifica os anexos dos registros da página em lote, sem uma consulta adicional por ocorrência. Bucket, chave do objeto e credenciais não aparecem nas respostas.
 
-Propõe-se acrescentar `possuiFotografia` às respostas de ocorrência somente quando a persistência estiver disponível. O frontend deve buscar os bytes com autenticação e gerenciar o ciclo de vida da URL temporária do navegador; uma tag de imagem com URL direta não envia o Bearer da aplicação. Se o envio da foto falhar depois da criação, o cliente deve guardar o ID criado e repetir apenas o envio da foto, sem cadastrar a ocorrência novamente. O bloqueio atual de envio com foto permanece até esse fluxo estar completo.
+Os erros seguem `ApiError`: 400 para arquivo ausente/inválido, UUID inválido ou tipo incompatível; 401 para autenticação inválida/conta removida; 403 para administrador tentando enviar em nome de outro autor; 404 para ocorrência fora do escopo, inexistente ou fotografia ausente/não disponível; 409 para fotografia existente ou envio pendente; 413 quando o parser multipart recusa o tamanho; 503 para armazenamento indisponível ou falha na conclusão do envio. O excesso detectado pelo validador de conteúdo retorna 400; o limite de transporte retorna 413.
 
-### Proposta para a DB-09
+### Conteúdo e autorização
 
-Usar a tabela `anexo`, com uma fotografia por ocorrência no MVP:
+`ValidadorFotografia` aceita somente JPEG/PNG, compara MIME declarado com conteúdo real, limita o arquivo recebido e o resultado regravado a 5 MiB, cada lado a 8192 pixels e a área a 16 milhões de pixels. Regrava a imagem sem metadados e conteúdo adicional. O caminho usa UUID e extensão derivados pelo backend, sem aproveitar o nome original. O limite multipart é 5 MiB por arquivo e 6 MiB por requisição para acomodar os cabeçalhos.
 
-| Campo proposto | Regra |
-| --- | --- |
-| `id` | UUID, chave primária gerada pelo backend |
-| `ocorrencia_id` | UUID obrigatório, FK e UNIQUE; impede duas fotografias para a mesma ocorrência |
-| `bucket` | VARCHAR(100) obrigatório |
-| `chave_objeto` | VARCHAR(255) obrigatório; UUID gerado pelo backend + `.jpg` ou `.png`; UNIQUE junto com `bucket` |
-| `tipo_conteudo` | VARCHAR(50), somente `image/jpeg` e `image/png` |
-| `tamanho_bytes` | BIGINT, maior que zero e até 5.242.880; refere-se ao conteúdo regravado |
-| `largura`, `altura` | Inteiros positivos até 8192, produto até 16.000.000 |
-| `data_criacao` | TIMESTAMP obrigatório, seguindo o padrão atual |
+`FotografiaAcessoService` reutiliza a consulta de ocorrência e seu escopo. A autorização antecede qualquer chamada ao Storage. Cidadãos não conseguem distinguir ocorrência inexistente de uma ocorrência de outro autor. O perfil atual no banco prevalece sobre o perfil antigo do JWT.
 
-Não persistir os bytes no PostgreSQL, chave secreta, URL pública/assinada ou caminho fornecido pelo cliente. Recomenda-se FK com exclusão restrita inicialmente, pois exclusão em cascata do metadado não remove o objeto do Storage. O MVP não terá endpoint público de exclusão/substituição da foto.
+### Reserva, falhas e recuperação
 
-**Decisão a alinhar antes da implementação:** PostgreSQL e Storage não participam da mesma transação. Recomenda-se reservar o vínculo/chave antes do upload e manter estado durável do envio (`PENDENTE`, `DISPONIVEL` e falha/limpeza pendente), com reconciliação das falhas; somente anexos disponíveis devem aparecer na consulta. A equipe deve confirmar os campos de estado/data de atualização ou estratégia equivalente na DB-09. O método `excluir` prepara a compensação, mas uma tentativa de exclusão isolada não garante ausência de objetos órfãos. Uploads concorrentes e repetição após timeout precisam ser testados na integração, respeitando a unicidade do vínculo e sem substituir objeto existente.
+1. Validar acesso e arquivo. Sem armazenamento habilitado/configurado, responder 503, sem reservar anexo.
+2. Reservar o vínculo `PENDENTE` em transação independente e confirmada, com bloqueio da ocorrência e unicidade do vínculo.
+3. Enviar o arquivo à chave reservada, sem sobrescrita. A chamada externa ocorre fora da transação de banco.
+4. Confirmar `DISPONIVEL` em outra transação. Somente então retornar 201 e permitir a consulta.
 
-### Supabase Storage privado
+Se o upload ou a confirmação falhar, preservar o vínculo/chave e tentar marcar `LIMPEZA_PENDENTE`. Se essa sinalização falhar, a reserva `PENDENTE` já confirmada continua recuperável. Uma possível confirmação já persistida como `DISPONIVEL` não é convertida em falha por compensação.
 
-Preparar o bucket privado `ocorrencias-fotografias`, com restrição a JPEG/PNG e 5 MiB. A validação do backend continua obrigatória. O JWT do Zelar identifica o usuário somente na API do Zelar; o backend consulta o Storage com uma **secret key do servidor** (`sb_secret_...`), enviada no cabeçalho `apikey`. O adaptador desta etapa suporta esse tipo de chave, não a chave pública nem o JWT do Zelar. Nunca configurar a secret key no frontend, em variável `VITE_*`, em logs ou no repositório.
+Com fotografias habilitadas, `FotografiaRecuperacaoJob` executa a cada minuto. Processa até 20 registros pendentes com última atualização há pelo menos 10 minutos. Reivindica o registro com bloqueio, confirma o estado de limpeza, solicita exclusão idempotente no bucket e só então remove o metadado. Se a exclusão ou a remoção do metadado falhar, mantém o vínculo para outra tentativa. Fotografias disponíveis e reservas recentes ficam fora da limpeza. Registros de outro bucket permanecem pendentes em vez de excluir um objeto no bucket errado.
 
-Variáveis propostas, **ainda não consumidas pela aplicação**:
+Durante a recuperação, uma nova tentativa de envio recebe 409 e deve aguardar a liberação do vínculo. Depois da limpeza, repetir somente o envio da foto à mesma ocorrência. As transações do PostgreSQL não abrangem o Supabase. A recuperação é eventual, depende da disponibilidade do provedor e usa uma carência superior aos timeouts do cliente; não constitui garantia de atomicidade distribuída ou proteção contra alterações manuais no bucket/banco. Não há endpoint de exclusão/substituição de fotos no MVP.
+
+### Configuração local e Docker
+
+Criar o bucket privado `ocorrencias-fotografias` no Supabase, com restrição a JPEG/PNG e 5 MiB. Configurar no ambiente do processo, no IntelliJ ou no `.env` consumido pelo Compose/launcher:
 
 ```dotenv
+FOTOGRAFIAS_HABILITADAS=true
 SUPABASE_STORAGE_URL=https://seu-projeto.supabase.co
 SUPABASE_STORAGE_BUCKET=ocorrencias-fotografias
 SUPABASE_STORAGE_SECRET_KEY=
 ```
 
-Na integração, criar configuração própria e um `RestClient.Builder` dedicado, com limites explícitos de conexão/leitura e sem redirecionar credenciais para outro host. Validar configuração sem exibir a chave. Não habilitar tentativas automáticas de upload antes de definir o tratamento de operação com resultado incerto. Não alterar `SUPABASE_PUBLISHABLE_KEY` ou `JWT_SECRET` para usar a chave de Storage.
+`SUPABASE_STORAGE_URL` é somente a origem HTTPS do projeto. Preencher `SUPABASE_STORAGE_SECRET_KEY` com uma secret key do servidor (`sb_secret_...`). A chave pública e o JWT do Zelar não substituem essa chave. Ela nunca deve ir para o frontend, variável `VITE_*`, repositório ou logs. O adaptador REST utiliza o cabeçalho `apikey`, conexão de até 5 segundos, leitura de até 20 segundos e não segue redirecionamentos. Não realiza repetição automática de upload.
 
-Referências do fornecedor: [chaves de API](https://supabase.com/docs/guides/getting-started/api-keys), [buckets e restrições](https://supabase.com/docs/guides/storage/buckets/fundamentals), [download privado](https://supabase.com/docs/guides/storage/serving/downloads) e [operações HTTP no SDK oficial](https://github.com/supabase/storage-js/blob/main/src/packages/StorageFileApi.ts).
+O padrão é `FOTOGRAFIAS_HABILITADAS=false`: o restante da aplicação inicia sem credenciais de Storage. O `.env` não é carregado automaticamente pelo Spring Boot executado sozinho; configurar as variáveis no IntelliJ/terminal ou usar o Compose/launcher que lê esse arquivo. Reiniciar o backend para aplicar mudanças de configuração, após integrar e validar as migrations necessárias.
 
-### Validação e próximos passos
+Referências do fornecedor: [chaves de API](https://supabase.com/docs/guides/getting-started/api-keys), [bucket privado e restrições](https://supabase.com/docs/guides/storage/buckets/fundamentals) e [download autenticado](https://supabase.com/docs/guides/storage/serving/downloads).
 
-Os testes de validação cobrem arquivos vazios, MIME incompatível, conteúdo falso/truncado, excesso real de bytes, dimensões excessivas e cópia defensiva. Os testes de autorização verificam delegação à visibilidade existente, envio pelo autor, consulta administrativa e propagação dos erros de autenticação/recurso ausente. Os testes do adaptador verificam rotas, cabeçalhos, conteúdo, limites e falhas com HTTP simulado.
+### Integração do frontend
 
-Após a DB-09: integrar entidade/repositório, configuração e limites HTTP, orquestração consistente do envio, endpoints e tratamento de erros; testar concorrência, falha de persistência/Storage, compensação e consulta por diferentes perfis; validar um bucket privado real separado; por fim conectar o frontend e retirar o bloqueio atual de fotografia. Nenhuma migration deve ser duplicada nesta branch e a BE-13 só pode ser concluída após esse fluxo completo.
+O cliente deve criar a ocorrência em JSON e enviar a foto ao endpoint próprio usando o ID retornado. Se a segunda etapa falhar, guardar esse ID e repetir somente o envio, sem criar outra ocorrência. Um 409 após uma tentativa com resultado incerto exige consultar `possuiFotografia`: se verdadeiro, o envio já concluiu; se falso, há recuperação pendente.
 
-Validação desta preparação: 318 testes aprovados, sem falhas ou erros, incluindo 64 novos (20 de validação, 6 de acesso e 38 de armazenamento simulado). Execução local em Java 24, compilando para Java 21; a suíte usa H2 nos testes de integração existentes. PostgreSQL e bucket privado reais, configuração de rede/credenciais e CI com Java 21 permanecem para a integração. As etapas RED e GREEN estão registradas em commits separados, com um commit próprio para cada classe nova.
+Para exibir a imagem, buscar os bytes com Bearer e criar uma URL temporária do navegador. Revogar essa URL quando o componente deixar de usá-la ou a sessão mudar. Uma tag de imagem com URL direta não envia o token do Zelar. A adaptação do cliente HTTP e das telas do frontend é uma entrega separada; esta branch altera somente o backend e não retira o bloqueio antigo do frontend.
+
+### Validação
+
+Em 26/10/2026: 398 testes aprovados na suíte completa, sem falhas/erros/ignorados. Em PostgreSQL 17.11 vazio, 72 casos aprovados: 54 da migration e 18 do ciclo HTTP, com Flyway V1–V5 e Hibernate validate incluindo a entidade `Anexo`. Os cenários incluem envio/consulta, perfis, conta removida, foto inválida, duplicidade, dois envios simultâneos, indicador nas consultas/atualizações, reservas confirmadas antes da chamada externa, falha do Storage, falha de confirmação/sinalização, recuperação e preservação de fotos disponíveis. O limite multipart também foi exercitado por HTTP real em porta aleatória.
+
+Os testes usam HTTP simulado para o Supabase, sem comprovar credenciais, permissões ou conectividade de um bucket real. Essa verificação continua pendente da configuração local. Execução local em Java 24 com compilação para Java 21. A CI configura Java 21 e passa a executar os testes da migration e das fotografias em PostgreSQL temporário. O push permanece manual; a CI executa automaticamente após o envio e a abertura do PR.
+
 
 ## Metadados de fotografias (DB-09)
 
 A migration `V5__criar_tabela_anexo.sql` cria o schema necessário para a BE-13. Ela sucede a V4 da DB-06 e preserva V1 a V4. Uma ocorrência continua válida sem fotografia: o vínculo parte de `anexo`, sem nova coluna obrigatória em `ocorrencia`.
 
-O contrato segue a preparação da branch `feature/ocorrencia-photos`: uma fotografia JPEG/PNG por ocorrência, conteúdo de até 5 MiB, bucket privado e acesso mediado pelo backend. Esta entrega trata exclusivamente do schema, testes e documentação. Entidade/repositório de anexo, upload, consulta, configuração do Supabase e reconciliação pertencem à continuação da BE-13.
+O contrato segue a preparação da branch `feature/ocorrencia-photos`: uma fotografia JPEG/PNG por ocorrência, conteúdo de até 5 MiB, bucket privado e acesso mediado pelo backend. A entrega independente da DB-09 trata do schema, testes e documentação. Nesta branch, a BE-13 já integra entidade/repositório, upload, consulta, configuração do Supabase e recuperação, conforme descrito acima.
 
 ### Modelo relacional
 
@@ -334,11 +329,11 @@ DB09_TEST_PASSWORD=
 
 O usuário de testes precisa criar/remover schemas no banco exclusivo para o cenário de upgrade. Não apontar essas variáveis para o banco da aplicação. Execute `./mvnw -Dtest=AnexoMigrationIntegrationTest test` (Windows: `./mvnw.cmd -Dtest=AnexoMigrationIntegrationTest test`). As fixtures normais usam rollback e os cenários inválidos usam savepoints para recuperar a transação após a rejeição de uma constraint no PostgreSQL.
 
-O workflow `maven.yml` mantém a compilação/testes/build Docker e acrescenta um job com PostgreSQL 17 temporário para essa suíte. A credencial do container é exclusiva de CI, sem vínculo com o Supabase ou ambientes reais. O Hibernate valida as entidades já mapeadas; como a entidade de anexo ainda será criada na BE-13, a nova tabela é verificada diretamente por JDBC e pelas constraints. Não considerar isso validação de um mapeamento JPA de anexo ainda inexistente.
+O workflow `maven.yml` mantém a compilação/testes/build Docker e acrescenta um job com PostgreSQL 17 temporário para essa suíte. A credencial do container é exclusiva de CI, sem vínculo com o Supabase ou ambientes reais. Na entrega independente da DB-09, o Hibernate validou as entidades existentes e a tabela de anexo foi verificada por JDBC/constraints. Nesta BE-13, a entidade `Anexo` também integra o Hibernate validate, com teste em PostgreSQL real.
 
 ### Ordem de integração
 
-Integrar esta DB-09 sobre a `develop` com a V4 da DB-06. A DB-07 está em PR próprio e deve acompanhar a verificação do banco limpo. Depois, atualizar a branch `feature/ocorrencia-photos` com a `develop` e continuar a BE-13 usando este schema. A branch alternativa `feat/foto-resolver`, baseada em S3 e outra V4 de fotografias, ficou fora deste contrato por decisão do responsável; não integrar sua migration como se fosse parte desta entrega.
+Integrar esta DB-09 sobre a `develop` com a V4 da DB-06. A DB-07 foi integrada pelo PR #84 e esta branch já incorpora essa base. A branch `feature/ocorrencia-photos` incorporou localmente a DB-09 para implementar os endpoints. O PR #85 continua sendo a entrega independente da migration. A branch alternativa `feat/foto-resolver`, baseada em S3 e outra V4 de fotografias, ficou fora deste contrato por decisão do responsável; não integrar sua migration como se fosse parte desta entrega.
 
 Referência sobre constraints e índices de unicidade: [documentação do PostgreSQL 17](https://www.postgresql.org/docs/17/ddl-constraints.html).
 
