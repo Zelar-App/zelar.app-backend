@@ -194,3 +194,83 @@ Erros no formato `ApiError`: 401 para autenticação inválida ou conta removida
 `OcorrenciaIndicadoresIntegrationTest` cobre banco vazio, cada status isolado, múltiplos autores e status, criação via API e alterações de status persistidas como fixtures de teste, resposta sem dados pessoais e autorização. O teste de alterações persistidas complementa os testes próprios do fluxo HTTP de status da BE-10. Os testes do serviço verificam autorização antes da consulta e preservação de contadores de 64 bits. A suíte padrão usa H2 com Flyway e Hibernate validate nos testes de integração; a consulta agregada também deve ser conferida em PostgreSQL separado e após reinício.
 
 Validação da BE-15: 15 testes novos (12 de integração e 3 de serviço), com 174 testes aprovados na suíte completa desta branch. PostgreSQL 17 isolado validou banco vazio, criação via API, mudanças de status persistidas como fixtures, múltiplos autores, escopo global, autorização e reinício. Execução local em Java 24, compilando para Java 21; Java 21 e imagem Docker permanecem para validação no CI.
+
+## Metadados de fotografias (DB-09)
+
+A migration `V5__criar_tabela_anexo.sql` cria o schema necessário para a BE-13. Ela sucede a V4 da DB-06 e preserva V1 a V4. Uma ocorrência continua válida sem fotografia: o vínculo parte de `anexo`, sem nova coluna obrigatória em `ocorrencia`.
+
+O contrato segue a preparação da branch `feature/ocorrencia-photos`: uma fotografia JPEG/PNG por ocorrência, conteúdo de até 5 MiB, bucket privado e acesso mediado pelo backend. Esta entrega trata exclusivamente do schema, testes e documentação. Entidade/repositório de anexo, upload, consulta, configuração do Supabase e reconciliação pertencem à continuação da BE-13.
+
+### Modelo relacional
+
+```mermaid
+erDiagram
+    USUARIO ||--o{ OCORRENCIA : registra
+    OCORRENCIA ||--o| ANEXO : possui
+    ANEXO {
+        UUID id PK
+        UUID ocorrencia_id FK,UK
+        VARCHAR bucket
+        VARCHAR chave_objeto
+        VARCHAR tipo_conteudo
+        BIGINT tamanho_bytes
+        INTEGER largura
+        INTEGER altura
+        VARCHAR estado_upload
+        TIMESTAMP data_criacao
+        TIMESTAMP data_atualizacao
+    }
+```
+
+| Campo | Tipo e regra |
+| --- | --- |
+| `id` | UUID obrigatório, PK, gerado pelo backend |
+| `ocorrencia_id` | UUID obrigatório, FK para `ocorrencia.id`, UNIQUE |
+| `bucket` | VARCHAR(100), obrigatório, nome com letras minúsculas, números e hífen |
+| `chave_objeto` | VARCHAR(255), obrigatório, UUID em minúsculas seguido de `.jpg` ou `.png` |
+| `tipo_conteudo` | VARCHAR(50), obrigatório, `image/jpeg` ou `image/png`, correspondente à extensão |
+| `tamanho_bytes` | BIGINT obrigatório, de 1 a 5.242.880, referente ao conteúdo validado e regravado |
+| `largura`, `altura` | INTEGER obrigatório, de 1 a 8192 por lado, até 16.000.000 de pixels no total |
+| `estado_upload` | VARCHAR(20) obrigatório, padrão `PENDENTE`, valores descritos abaixo |
+| `data_criacao` | TIMESTAMP obrigatório, padrão `CURRENT_TIMESTAMP` |
+| `data_atualizacao` | TIMESTAMP obrigatório, padrão inicial `CURRENT_TIMESTAMP`; o backend deve atualizar nas mudanças |
+
+`UNIQUE (bucket, chave_objeto)` impede que o mesmo objeto represente dois anexos. A FK usa `ON DELETE RESTRICT` e a unicidade por ocorrência evita dois vínculos concorrentes, inclusive enquanto o envio está pendente. Os índices das constraints UNIQUE atendem à busca por ocorrência/objeto; `idx_anexo_estado_atualizacao` apoia a futura recuperação de operações interrompidas.
+
+O banco armazena metadados, sem binário, nome original do arquivo, chave secreta ou URL assinada/pública. As constraints não verificam o conteúdo do arquivo: essa validação permanece no backend.
+
+### Estados de envio e exclusão
+
+| Estado | Significado para a futura BE-13 |
+| --- | --- |
+| `PENDENTE` | Vínculo e chave reservados e confirmados no banco antes da chamada ao Storage |
+| `DISPONIVEL` | Backend confirmou o envio e publicou o vínculo para consulta |
+| `LIMPEZA_PENDENTE` | Operação precisa de compensação ou verificação do resultado no Storage |
+
+Fluxo previsto: validar/autorização, reservar o vínculo em transação confirmada, enviar o arquivo com a chave conhecida e marcar `DISPONIVEL` em outra transação. Exibir apenas anexos disponíveis. Em resultado incerto ou falha, preservar a chave e registrar necessidade de recuperação. Uma nova tentativa não deve substituir arquivo ou apagar vínculo enquanto a situação anterior não estiver resolvida. A futura reconciliação precisa distinguir uma operação interrompida de uma ainda em execução.
+
+A DB-09 fornece os estados duráveis e as constraints, sem implementar a máquina de estados, o processo de recuperação ou uma transação distribuída. A FK impede apagar a ocorrência deixando de controlar o objeto no Storage. Uma exclusão futura deve remover/confirmar a ausência do objeto antes de apagar seu metadado e, só então, permitir remover a ocorrência. Se o Storage falhar, manter o registro para recuperação. SQL direto que apague `anexo` ou exclusão manual no bucket não recebem essa garantia automaticamente. O MVP não disponibiliza endpoint de exclusão/substituição de fotografia.
+
+### Validação reproduzível
+
+`AnexoMigrationIntegrationTest` roda por padrão em H2 no modo PostgreSQL, com Flyway e `spring.jpa.hibernate.ddl-auto=validate`. Verifica metadados obrigatórios, formatos, limites, FK, unicidades, restrição de exclusão, estados e compatibilidade com ocorrência sem foto. Um cenário separado cria schema exclusivo na V4, insere uma ocorrência, aplica a V5 e verifica preservação e repetição sem reaplicar migrations. O cenário remove somente o schema que ele próprio criou.
+
+Para executar os mesmos testes em **PostgreSQL vazio e exclusivo de testes**, configure no ambiente do processo:
+
+```dotenv
+DB09_TEST_URL=jdbc:postgresql://localhost:55439/zelar_migrations_test
+DB09_TEST_USERNAME=usuario_de_teste
+DB09_TEST_PASSWORD=
+```
+
+O usuário de testes precisa criar/remover schemas no banco exclusivo para o cenário de upgrade. Não apontar essas variáveis para o banco da aplicação. Execute `./mvnw -Dtest=AnexoMigrationIntegrationTest test` (Windows: `./mvnw.cmd -Dtest=AnexoMigrationIntegrationTest test`). As fixtures normais usam rollback e os cenários inválidos usam savepoints para recuperar a transação após a rejeição de uma constraint no PostgreSQL.
+
+O workflow `maven.yml` mantém a compilação/testes/build Docker e acrescenta um job com PostgreSQL 17 temporário para essa suíte. A credencial do container é exclusiva de CI, sem vínculo com o Supabase ou ambientes reais. O Hibernate valida as entidades já mapeadas; como a entidade de anexo ainda será criada na BE-13, a nova tabela é verificada diretamente por JDBC e pelas constraints. Não considerar isso validação de um mapeamento JPA de anexo ainda inexistente.
+
+### Ordem de integração
+
+Integrar esta DB-09 sobre a `develop` com a V4 da DB-06. A DB-07 está em PR próprio e deve acompanhar a verificação do banco limpo. Depois, atualizar a branch `feature/ocorrencia-photos` com a `develop` e continuar a BE-13 usando este schema. A branch alternativa `feat/foto-resolver`, baseada em S3 e outra V4 de fotografias, ficou fora deste contrato por decisão do responsável; não integrar sua migration como se fosse parte desta entrega.
+
+Referência sobre constraints e índices de unicidade: [documentação do PostgreSQL 17](https://www.postgresql.org/docs/17/ddl-constraints.html).
+
+Validação local da DB-09 em 26/10/2026: 308 testes aprovados na suíte completa desta branch (254 da base e 54 novos), sem falhas, erros ou casos ignorados. Os mesmos 54 casos passaram em PostgreSQL 17.11 vazio, com Flyway V1–V5, Hibernate validate das entidades existentes e cenário de upgrade V4–V5. O PostgreSQL temporário foi encerrado ao final. Execução local em Java 24 com compilação para Java 21; a execução do novo job de CI em Java 21 depende do push manual e da abertura do PR. Os 64 testes da preparação da BE-13 permanecem na branch independente de fotografias.
