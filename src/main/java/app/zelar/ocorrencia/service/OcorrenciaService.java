@@ -9,6 +9,9 @@ import app.zelar.ocorrencia.dto.OcorrenciaPaginaResponse;
 import app.zelar.ocorrencia.dto.OcorrenciaResponse;
 import app.zelar.ocorrencia.entity.Localizacao;
 import app.zelar.ocorrencia.entity.Ocorrencia;
+import app.zelar.ocorrencia.entity.EstadoUpload;
+import app.zelar.ocorrencia.entity.Anexo;
+import app.zelar.ocorrencia.repository.AnexoRepository;
 import app.zelar.ocorrencia.repository.OcorrenciaRepository;
 import app.zelar.shared.exception.RecursoNaoEncontradoException;
 import app.zelar.usuario.entity.PerfilUsuario;
@@ -25,17 +28,20 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class OcorrenciaService {
 
     private final OcorrenciaRepository ocorrenciaRepository;
     private final UsuarioRepository usuarioRepository;
+    private final AnexoRepository anexoRepository;
 
     public OcorrenciaService(OcorrenciaRepository ocorrenciaRepository,
-                             UsuarioRepository usuarioRepository) {
+                             UsuarioRepository usuarioRepository, AnexoRepository anexoRepository) {
         this.ocorrenciaRepository = ocorrenciaRepository;
         this.usuarioRepository = usuarioRepository;
+        this.anexoRepository = anexoRepository;
     }
 
     @Transactional(readOnly = true)
@@ -64,8 +70,12 @@ public class OcorrenciaService {
 
         PageRequest pageable = PageRequest.of(request.pagina(), request.tamanho(),
                 Sort.by(Sort.Direction.DESC, "dataCriacao", "id"));
-        Page<OcorrenciaResponse> pagina = ocorrenciaRepository.findAll(filtros, pageable)
-                .map(OcorrenciaResponse::from);
+        Page<Ocorrencia> registros = ocorrenciaRepository.findAll(filtros, pageable);
+        var ids = registros.getContent().stream().map(Ocorrencia::getId).toList();
+        var comFotografia = anexoRepository.findByOcorrenciaIdInAndEstadoUpload(ids, EstadoUpload.DISPONIVEL)
+                .stream().map(Anexo::getOcorrenciaId).collect(Collectors.toSet());
+        Page<OcorrenciaResponse> pagina = registros.map(ocorrencia -> OcorrenciaResponse.from(ocorrencia)
+                .comFotografia(comFotografia.contains(ocorrencia.getId())));
         return OcorrenciaPaginaResponse.from(pagina);
     }
 
@@ -78,7 +88,12 @@ public class OcorrenciaService {
 
         Ocorrencia ocorrencia = ocorrenciaRepository.findOne(filtros)
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Ocorrência não encontrada."));
-        return OcorrenciaResponse.from(ocorrencia);
+        return responder(ocorrencia);
+    }
+
+    private OcorrenciaResponse responder(Ocorrencia ocorrencia) {
+        return OcorrenciaResponse.from(ocorrencia).comFotografia(anexoRepository
+                .existsByOcorrenciaIdAndEstadoUpload(ocorrencia.getId(), EstadoUpload.DISPONIVEL));
     }
 
     private Specification<Ocorrencia> visiveisPara(Usuario usuario, UUID usuarioId) {
@@ -99,7 +114,7 @@ public class OcorrenciaService {
         Ocorrencia ocorrencia = ocorrenciaRepository.findByIdParaAtualizacao(ocorrenciaId)
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Ocorrência não encontrada."));
         ocorrencia.atualizarStatus(request.status());
-        return OcorrenciaResponse.from(ocorrencia);
+        return responder(ocorrencia);
     }
 
     @Transactional
@@ -114,7 +129,7 @@ public class OcorrenciaService {
         Ocorrencia ocorrencia = ocorrenciaRepository.findByIdParaAtualizacao(ocorrenciaId)
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Ocorrência não encontrada."));
         ocorrencia.atualizarPrioridade(request.prioridade());
-        return OcorrenciaResponse.from(ocorrencia);
+        return responder(ocorrencia);
     }
 
     @Transactional

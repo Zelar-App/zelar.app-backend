@@ -6,6 +6,7 @@ import app.zelar.ocorrencia.entity.Localizacao;
 import app.zelar.ocorrencia.entity.Ocorrencia;
 import app.zelar.ocorrencia.repository.OcorrenciaRepository;
 import app.zelar.ocorrencia.service.FotografiaService;
+import app.zelar.ocorrencia.service.FotografiaPersistenciaService;
 import app.zelar.ocorrencia.storage.FotografiaStorage;
 import app.zelar.ocorrencia.exception.FotografiaStorageException;
 import app.zelar.usuario.entity.PerfilUsuario;
@@ -17,11 +18,15 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpHeaders;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import javax.imageio.ImageIO;
@@ -32,6 +37,15 @@ import java.time.ZoneOffset;
 import java.sql.Timestamp;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -39,7 +53,7 @@ import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@SpringBootTest(properties = {
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
         "spring.datasource.url=jdbc:h2:mem:zelar-fotografia;MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
         "spring.jpa.hibernate.ddl-auto=validate"
 })
@@ -54,12 +68,25 @@ class FotografiaIntegrationTest {
     @Autowired private JdbcTemplate jdbc;
     @Autowired private FotografiaService service;
     @MockitoBean private FotografiaStorage storage;
+    @MockitoSpyBean private FotografiaPersistenciaService persistencia;
+    @LocalServerPort private int porta;
 
     private Usuario autor;
     private Usuario outro;
     private Usuario admin;
     private UUID id;
     private byte[] png;
+
+    @DynamicPropertySource
+    static void configurarPostgresOpcional(DynamicPropertyRegistry registry) {
+        String url = System.getenv("BE13_TEST_URL");
+        if (url != null && !url.isBlank()) {
+            registry.add("spring.datasource.url", () -> url);
+            registry.add("spring.datasource.username", () -> System.getenv("BE13_TEST_USERNAME"));
+            registry.add("spring.datasource.password", () -> System.getenv("BE13_TEST_PASSWORD"));
+            registry.add("spring.datasource.driver-class-name", () -> "org.postgresql.Driver");
+        }
+    }
 
     @BeforeEach
     void preparar() throws Exception {
@@ -222,6 +249,93 @@ class FotografiaIntegrationTest {
         mvc.perform(get(caminho()).header(HttpHeaders.AUTHORIZATION, token)).andExpect(status().isUnauthorized());
         mvc.perform(get("/api/v1/ocorrencias/invalido/fotografia").header(HttpHeaders.AUTHORIZATION, bearer(autor)))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void deveRecusarDoisEnviosSimultaneosSemDuplicarUpload() throws Exception {
+        CountDownLatch iniciou = new CountDownLatch(1);
+        CountDownLatch liberar = new CountDownLatch(1);
+        doAnswer(invocacao -> {
+            iniciou.countDown();
+            assertTrue(liberar.await(10, TimeUnit.SECONDS));
+            return null;
+        }).when(storage).salvar(anyString(), any());
+        try (var executor = Executors.newSingleThreadExecutor()) {
+            var primeiro = executor.submit(() -> {
+                enviar();
+                return true;
+            });
+            try {
+                assertTrue(iniciou.await(10, TimeUnit.SECONDS));
+                mvc.perform(multipart(caminho()).file(foto()).header(HttpHeaders.AUTHORIZATION, bearer(autor)))
+                        .andExpect(status().isConflict());
+            } finally {
+                liberar.countDown();
+            }
+            assertTrue(primeiro.get(10, TimeUnit.SECONDS));
+        }
+        assertEquals(1, quantidade());
+        verify(storage, times(1)).salvar(anyString(), any());
+    }
+
+    @Test
+    void falhaAoConfirmarUploadMantemChaveParaCompensacao() throws Exception {
+        doThrow(new IllegalStateException("falha interna que não deve ser exposta"))
+                .when(persistencia).disponibilizar(any());
+        mvc.perform(multipart(caminho()).file(foto()).header(HttpHeaders.AUTHORIZATION, bearer(autor)))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.mensagem").value("Não foi possível acessar o armazenamento de fotografias."));
+        assertEquals("LIMPEZA_PENDENTE", estado());
+        envelhecer();
+        service.recuperarPendentes();
+        verify(storage).excluir(anyString());
+        assertEquals(0, quantidade());
+    }
+
+    @Test
+    void reservaPermaneceRecuperavelMesmoSeNaoForPossivelSinalizarFalha() throws Exception {
+        doThrow(new FotografiaStorageException()).when(storage).salvar(anyString(), any());
+        doThrow(new IllegalStateException("banco indisponível")).when(persistencia).sinalizarFalha(any());
+        mvc.perform(multipart(caminho()).file(foto()).header(HttpHeaders.AUTHORIZATION, bearer(autor)))
+                .andExpect(status().isServiceUnavailable());
+        assertEquals("PENDENTE", estado());
+        envelhecer();
+        service.recuperarPendentes();
+        assertEquals(0, quantidade());
+    }
+
+    @Test
+    void devePreservarIndicadorDeFotoNasAtualizacoesAdministrativas() throws Exception {
+        enviar();
+        mvc.perform(patch("/api/v1/ocorrencias/" + id + "/prioridade")
+                .header(HttpHeaders.AUTHORIZATION, bearer(admin)).contentType("application/json")
+                .content("{\"prioridade\":\"ALTA\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.possuiFotografia").value(true));
+        mvc.perform(patch("/api/v1/ocorrencias/" + id + "/status")
+                .header(HttpHeaders.AUTHORIZATION, bearer(admin)).contentType("application/json")
+                .content("{\"status\":\"EM_ANALISE\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.possuiFotografia").value(true));
+    }
+
+    @Test
+    void servidorDeveRejeitarMultipartAcimaDeCincoMiBSemReservarAnexo() throws Exception {
+        String limite = "limite-foto-zelar";
+        var corpo = new ByteArrayOutputStream();
+        corpo.write(("--" + limite + "\r\nContent-Disposition: form-data; name=\"foto\"; filename=\"foto.png\"\r\n"
+                + "Content-Type: image/png\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
+        corpo.write(new byte[5242881]);
+        corpo.write(("\r\n--" + limite + "--\r\n").getBytes(StandardCharsets.US_ASCII));
+        var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + porta + caminho()))
+                .timeout(Duration.ofSeconds(15)).header(HttpHeaders.AUTHORIZATION, bearer(autor))
+                .header("Content-Type", "multipart/form-data; boundary=" + limite)
+                .POST(HttpRequest.BodyPublishers.ofByteArray(corpo.toByteArray())).build();
+        try (var client = HttpClient.newHttpClient()) {
+            var resposta = client.send(request, HttpResponse.BodyHandlers.ofString());
+            assertEquals(413, resposta.statusCode());
+            assertTrue(resposta.body().contains("\"status\":413"));
+        }
+        assertEquals(0, quantidade());
+        verifyNoInteractions(storage);
     }
 
     private void enviar() throws Exception {
