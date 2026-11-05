@@ -84,6 +84,16 @@ As respostas de erro seguem `ApiError`: 400 para entrada inválida, 401 para aut
 
 O GitHub Actions executa `clean verify` com Java 21 e o build da imagem Docker em PRs e pushes para `develop`, `stage` e `main`.
 
+## Horários das ocorrências
+
+`dataCriacao` e `dataAtualizacao` são retornados como instantes ISO-8601 em UTC, com `Z` (por exemplo, `2026-11-06T01:30:00Z`). A interface deve interpretar esse instante e formatá-lo no fuso do usuário: em America/Sao_Paulo, o exemplo corresponde a 05/11 às 22:30. Não subtrair três horas manualmente nem adicionar um segundo fuso ao valor recebido.
+
+O serviço usa o Clock já configurado no backend e converte seu instante para UTC explicitamente, inclusive se o Clock/JVM tiver outro fuso. Criação e alterações de status/prioridade seguem a mesma convenção; repetição de prioridade preserva a data anterior. As colunas existentes continuam TIMESTAMP sem timezone e passam a ter convenção UTC na aplicação. Não há alteração de migration aplicada nem regravação automática de dados históricos.
+
+Na implantação, verificar a origem das datas antigas: valores já gravados em UTC pelo servidor passam a ser identificados corretamente no JSON, sem somar/subtrair horas no banco. Dados criados anteriormente em outro fuso continuam sem essa informação; eventual saneamento exige identificar sua origem e um plano de migração específico. A convenção acima se aplica às datas de ocorrências; datas cadastrais e de erro mantêm seu contrato atual.
+
+`OcorrenciaHorarioIntegrationTest` cobre Clock fixo com fuso não UTC, virada de dia na conversão brasileira, persistência e respostas de criação/listagem/detalhe/atualizações. Usa autenticação de teste e banco H2 com Flyway/validate; os testes próprios de autenticação permanecem complementares.
+
 ## Criação de ocorrências
 
 `POST /api/v1/ocorrencias` exige `Authorization: Bearer <accessToken>` e um corpo JSON:
