@@ -338,3 +338,11 @@ Integrar esta DB-09 sobre a `develop` com a V4 da DB-06. A DB-07 foi integrada p
 Referência sobre constraints e índices de unicidade: [documentação do PostgreSQL 17](https://www.postgresql.org/docs/17/ddl-constraints.html).
 
 Validação local da DB-09 em 26/10/2026: 308 testes aprovados na suíte completa desta branch (254 da base e 54 novos), sem falhas, erros ou casos ignorados. Os mesmos 54 casos passaram em PostgreSQL 17.11 vazio, com Flyway V1–V5, Hibernate validate das entidades existentes e cenário de upgrade V4–V5. O PostgreSQL temporário foi encerrado ao final. Execução local em Java 24 com compilação para Java 21; a execução do novo job de CI em Java 21 depende do push manual e da abertura do PR. Os 64 testes da preparação da BE-13 permanecem na branch independente de fotografias.
+
+## Cobertura dos serviços
+
+./mvnw clean verify gera relatório JaCoCo em 	arget/site/jacoco/index.html, com versões XML/CSV no mesmo diretório. No Windows, use .\mvnw.cmd clean verify. O relatório considera a suíte completa, incluindo integração; não representa somente testes unitários.
+
+A verificação exige, em cada pacote pp.zelar.*.service, pelo menos 95% das linhas e 90% dos ramos cobertos. O mesmo comando já é executado no CI. Métodos sem ramos não recebem um percentual de decisões inventado. Não há exclusões de serviços para atingir a meta, e cobertura não substitui asserções sobre autorização, estados e preservação de dados.
+
+Os testes específicos de fotografias usam Clock fixo, repositórios e Storage controlados. Conferem reserva/publicação/limpeza, fronteira exata da carência, ordem de exclusão antes do metadado e continuidade do lote após falha. Eles complementam os testes com banco e HTTP; não validam o bucket real nem o disparo temporal do scheduler por si só.
