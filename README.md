@@ -94,6 +94,8 @@ Na implantação, verificar a origem das datas antigas: valores já gravados em 
 
 `OcorrenciaHorarioIntegrationTest` cobre Clock fixo com fuso não UTC, virada de dia na conversão brasileira, persistência e respostas de criação/listagem/detalhe/atualizações. Usa autenticação de teste e banco H2 com Flyway/validate; os testes próprios de autenticação permanecem complementares.
 
+Para repetir a suíte de horário em PostgreSQL vazio e exclusivo de testes, configure `UTC_TEST_URL`, `UTC_TEST_USERNAME` e `UTC_TEST_PASSWORD` no processo e execute `./mvnw -Dtest=OcorrenciaHorarioIntegrationTest test` (Windows: `./mvnw.cmd`). Sem essas variáveis, a suíte usa H2. Não apontar essas variáveis para o banco compartilhado.
+
 ## Criação de ocorrências
 
 `POST /api/v1/ocorrencias` exige `Authorization: Bearer <accessToken>` e um corpo JSON:
