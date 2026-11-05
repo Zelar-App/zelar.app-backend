@@ -16,6 +16,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
@@ -54,6 +56,17 @@ class OcorrenciaHorarioIntegrationTest {
     @MockitoBean private Clock clock;
     private Usuario autor;
     private Usuario administrador;
+
+    @DynamicPropertySource
+    static void configurarPostgresOpcional(DynamicPropertyRegistry registry) {
+        String url = System.getenv("UTC_TEST_URL");
+        if (url != null && !url.isBlank()) {
+            registry.add("spring.datasource.url", () -> url);
+            registry.add("spring.datasource.username", () -> System.getenv("UTC_TEST_USERNAME"));
+            registry.add("spring.datasource.password", () -> System.getenv("UTC_TEST_PASSWORD"));
+            registry.add("spring.datasource.driver-class-name", () -> "org.postgresql.Driver");
+        }
+    }
 
     @BeforeEach
     void configurar() {
