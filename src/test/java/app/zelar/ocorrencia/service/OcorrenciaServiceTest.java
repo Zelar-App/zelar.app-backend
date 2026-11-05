@@ -40,6 +40,11 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -60,10 +65,11 @@ class OcorrenciaServiceTest {
     private AnexoRepository anexoRepository;
 
     private OcorrenciaService ocorrenciaService;
+    private final Clock clock = Clock.fixed(Instant.parse("2026-11-06T01:30:00Z"), ZoneId.of("America/Sao_Paulo"));
 
     @BeforeEach
     void setUp() {
-        ocorrenciaService = new OcorrenciaService(ocorrenciaRepository, usuarioRepository, anexoRepository);
+        ocorrenciaService = new OcorrenciaService(ocorrenciaRepository, usuarioRepository, anexoRepository, clock);
     }
 
     @ParameterizedTest
@@ -88,7 +94,7 @@ class OcorrenciaServiceTest {
         assertEquals(StatusOcorrencia.ENVIADA, ocorrencia.getStatus());
         assertNull(ocorrencia.getPrioridade());
         assertNull(ocorrencia.getDataAtualizacao());
-        assertNotNull(ocorrencia.getDataCriacao());
+        assertEquals(LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC), ocorrencia.getDataCriacao());
         verify(ocorrenciaRepository).save(ocorrencia);
     }
 
@@ -143,7 +149,7 @@ class OcorrenciaServiceTest {
                 new AtualizarStatusOcorrenciaRequest(destino));
 
         assertEquals(destino, response.status());
-        assertNotNull(response.dataAtualizacao());
+        assertEquals(clock.instant(), response.dataAtualizacao());
         verify(ocorrenciaRepository).findByIdParaAtualizacao(ocorrenciaId);
         verify(ocorrenciaRepository, never()).save(any());
     }
@@ -276,7 +282,7 @@ class OcorrenciaServiceTest {
         assertEquals(ocorrenciaId, response.id());
         assertEquals(prioridade, response.prioridade());
         assertEquals(StatusOcorrencia.ENVIADA, response.status());
-        assertNotNull(response.dataAtualizacao());
+        assertEquals(clock.instant(), response.dataAtualizacao());
         var ordem = inOrder(usuarioRepository, ocorrenciaRepository);
         ordem.verify(usuarioRepository).findById(usuarioId);
         ordem.verify(ocorrenciaRepository).findByIdParaAtualizacao(ocorrenciaId);

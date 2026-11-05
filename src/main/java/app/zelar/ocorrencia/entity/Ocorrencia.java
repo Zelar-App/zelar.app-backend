@@ -19,6 +19,7 @@ import jakarta.persistence.Table;
 import org.springframework.util.Assert;
 
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -63,31 +64,46 @@ public class Ocorrencia {
 
     public Ocorrencia(Usuario usuario, CategoriaOcorrencia categoria,
                       String descricao, Localizacao localizacao) {
+        this(usuario, categoria, descricao, localizacao, LocalDateTime.now(ZoneOffset.UTC));
+    }
+
+    public Ocorrencia(Usuario usuario, CategoriaOcorrencia categoria,
+                      String descricao, Localizacao localizacao, LocalDateTime instante) {
         this.usuario = Objects.requireNonNull(usuario, "O usuário é obrigatório.");
         this.categoria = Objects.requireNonNull(categoria, "A categoria é obrigatória.");
         Assert.hasText(descricao, "A descrição é obrigatória.");
         this.descricao = descricao;
         this.localizacao = Objects.requireNonNull(localizacao, "A localização é obrigatória.");
         this.status = StatusOcorrencia.ENVIADA;
-        this.dataCriacao = LocalDateTime.now();
+        this.dataCriacao = Objects.requireNonNull(instante, "O instante é obrigatório.");
     }
 
     public void atualizarStatus(StatusOcorrencia novoStatus) {
+        atualizarStatus(novoStatus, LocalDateTime.now(ZoneOffset.UTC));
+    }
+
+    public void atualizarStatus(StatusOcorrencia novoStatus, LocalDateTime instante) {
+        Objects.requireNonNull(instante, "O instante é obrigatório.");
         Objects.requireNonNull(novoStatus, "O status é obrigatório.");
         if (!status.permiteTransicaoPara(novoStatus)) {
             throw new TransicaoStatusInvalidaException();
         }
         this.status = novoStatus;
-        this.dataAtualizacao = LocalDateTime.now();
+        this.dataAtualizacao = instante;
     }
 
     public void atualizarPrioridade(PrioridadeOcorrencia novaPrioridade) {
+        atualizarPrioridade(novaPrioridade, LocalDateTime.now(ZoneOffset.UTC));
+    }
+
+    public void atualizarPrioridade(PrioridadeOcorrencia novaPrioridade, LocalDateTime instante) {
+        Objects.requireNonNull(instante, "O instante é obrigatório.");
         Objects.requireNonNull(novaPrioridade, "A prioridade é obrigatória.");
         if (this.prioridade == novaPrioridade) {
             return;
         }
         this.prioridade = novaPrioridade;
-        this.dataAtualizacao = LocalDateTime.now();
+        this.dataAtualizacao = instante;
     }
 
     public UUID getId() {
