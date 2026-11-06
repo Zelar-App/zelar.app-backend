@@ -353,8 +353,16 @@ Validação local da DB-09 em 26/10/2026: 308 testes aprovados na suíte complet
 
 ## Cobertura dos serviços
 
-./mvnw clean verify gera relatório JaCoCo em 	arget/site/jacoco/index.html, com versões XML/CSV no mesmo diretório. No Windows, use .\mvnw.cmd clean verify. O relatório considera a suíte completa, incluindo integração; não representa somente testes unitários.
+./mvnw clean verify gera relatório JaCoCo em `target/site/jacoco/index.html`, com versões XML/CSV no mesmo diretório. No Windows, use .\mvnw.cmd clean verify. O relatório considera a suíte completa, incluindo integração; não representa somente testes unitários.
 
-A verificação exige, em cada pacote pp.zelar.*.service, pelo menos 95% das linhas e 90% dos ramos cobertos. O mesmo comando já é executado no CI. Métodos sem ramos não recebem um percentual de decisões inventado. Não há exclusões de serviços para atingir a meta, e cobertura não substitui asserções sobre autorização, estados e preservação de dados.
+A verificação exige, em cada pacote `app.zelar.*.service`, pelo menos 95% das linhas e 90% dos ramos cobertos. O mesmo comando já é executado no CI. Métodos sem ramos não recebem um percentual de decisões inventado. Não há exclusões de serviços para atingir a meta, e cobertura não substitui asserções sobre autorização, estados e preservação de dados.
 
 Os testes específicos de fotografias usam Clock fixo, repositórios e Storage controlados. Conferem reserva/publicação/limpeza, fronteira exata da carência, ordem de exclusão antes do metadado e continuidade do lote após falha. Eles complementam os testes com banco e HTTP; não validam o bucket real nem o disparo temporal do scheduler por si só.
+
+### Cobertura por classe
+
+O mesmo `clean verify` também exige 90% de linhas, ramos, métodos e instruções em **cada classe** de `app.zelar`. Isso impede que a média de um pacote esconda uma classe pouco testada. Permanecem os limites mais rigorosos de 95% de linhas e 90% de ramos por pacote de serviço.
+
+A única exceção no gate por classe é `ZelarAppBackendApplication`, ponto de entrada que apenas chama `SpringApplication.run`, sem regra de negócio. Os testes de integração já inicializam o contexto. A exceção é explícita no POM; o relatório bruto continua mostrando essa classe. Configurações de segurança/Storage, DTOs com validação, serviços, entidades e repositórios não são excluídos. Elementos sem ramos contáveis não recebem uma taxa de decisões fictícia.
+
+Os testes de imagens combinam arquivos reais com falhas controladas da API ImageIO. Os cenários de codec verificam recusa de resultado ausente, falha de gravação, saída acima de 5 MiB, dimensões inválidas e liberação do leitor, sem exigir arquivos gigantes nem acessar o bucket real. Os testes de contexto do Storage validam ativação e configuração antes de qualquer chamada de rede.
