@@ -27,6 +27,9 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -36,12 +39,14 @@ public class OcorrenciaService {
     private final OcorrenciaRepository ocorrenciaRepository;
     private final UsuarioRepository usuarioRepository;
     private final AnexoRepository anexoRepository;
+    private final Clock clock;
 
     public OcorrenciaService(OcorrenciaRepository ocorrenciaRepository,
-                             UsuarioRepository usuarioRepository, AnexoRepository anexoRepository) {
+                             UsuarioRepository usuarioRepository, AnexoRepository anexoRepository, Clock clock) {
         this.ocorrenciaRepository = ocorrenciaRepository;
         this.usuarioRepository = usuarioRepository;
         this.anexoRepository = anexoRepository;
+        this.clock = clock;
     }
 
     @Transactional(readOnly = true)
@@ -113,7 +118,7 @@ public class OcorrenciaService {
 
         Ocorrencia ocorrencia = ocorrenciaRepository.findByIdParaAtualizacao(ocorrenciaId)
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Ocorrência não encontrada."));
-        ocorrencia.atualizarStatus(request.status());
+        ocorrencia.atualizarStatus(request.status(), instante());
         return responder(ocorrencia);
     }
 
@@ -128,8 +133,12 @@ public class OcorrenciaService {
 
         Ocorrencia ocorrencia = ocorrenciaRepository.findByIdParaAtualizacao(ocorrenciaId)
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Ocorrência não encontrada."));
-        ocorrencia.atualizarPrioridade(request.prioridade());
+        ocorrencia.atualizarPrioridade(request.prioridade(), instante());
         return responder(ocorrencia);
+    }
+
+    private LocalDateTime instante() {
+        return LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC);
     }
 
     @Transactional
@@ -139,7 +148,7 @@ public class OcorrenciaService {
 
         Localizacao localizacao = new Localizacao(request.latitude(), request.longitude(),
                 request.enderecoAproximado());
-        Ocorrencia ocorrencia = new Ocorrencia(usuario, request.categoria(), request.descricao(), localizacao);
+        Ocorrencia ocorrencia = new Ocorrencia(usuario, request.categoria(), request.descricao(), localizacao, instante());
 
         return ocorrenciaRepository.save(ocorrencia);
     }
