@@ -106,7 +106,7 @@ class ValidadorFotografiaTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"8193,8", "5000,4000"})
+    @CsvSource({"8193,8", "8,8193", "5000,4000"})
     void deveRecusarDimensoesAntesDeDecodificarTodosOsPixels(int largura, int altura) throws Exception {
         byte[] png = imagem("png");
         ByteBuffer.wrap(png).putInt(16, largura).putInt(20, altura);
@@ -126,6 +126,76 @@ class ValidadorFotografiaTest {
         when(arquivo.getInputStream()).thenThrow(new IOException("conteudoConfidencial"));
         var exception = assertThrows(FotografiaInvalidaException.class, () -> validador.validar(arquivo));
         assertFalse(exception.getMessage().contains("conteudoConfidencial"));
+    }
+
+    @Test
+    void deveRecusarFormatoReconhecidoNaoPermitidoMesmoDeclaradoComoPng() throws Exception {
+        byte[] gif = imagem("gif");
+        var erro = assertThrows(FotografiaInvalidaException.class,
+                () -> validador.validar(arquivo("image/png", gif)));
+        assertTrue(erro.getMessage().contains("JPEG ou PNG"));
+    }
+
+    @Test
+    void deveTratarFalhaDoCodificadorSemPublicarImagem() throws Exception {
+        byte[] png = imagem("png");
+        try (var codecs = mockStatic(ImageIO.class, CALLS_REAL_METHODS)) {
+            codecs.when(() -> ImageIO.write(any(java.awt.image.RenderedImage.class), eq("png"),
+                    any(java.io.OutputStream.class))).thenReturn(false);
+            var erro = assertThrows(FotografiaInvalidaException.class,
+                    () -> validador.validar(arquivo("image/png", png)));
+            assertTrue(erro.getMessage().contains("preparar"));
+        }
+    }
+
+    @Test
+    void deveRecusarSaidaRegravadaAcimaDoLimiteMesmoComEntradaPequena() throws Exception {
+        byte[] png = imagem("png");
+        try (var codecs = mockStatic(ImageIO.class, CALLS_REAL_METHODS)) {
+            codecs.when(() -> ImageIO.write(any(java.awt.image.RenderedImage.class), eq("png"),
+                    any(java.io.OutputStream.class))).thenAnswer(invocation -> {
+                java.io.OutputStream saida = invocation.getArgument(2);
+                saida.write(new byte[FotografiaValidada.TAMANHO_MAXIMO_BYTES + 1]);
+                return true;
+            });
+            var erro = assertThrows(FotografiaInvalidaException.class,
+                    () -> validador.validar(arquivo("image/png", png)));
+            assertTrue(erro.getMessage().contains("5 MiB"));
+        }
+    }
+
+    @ParameterizedTest
+    @CsvSource({"0,8", "-1,8", "10,0", "10,-1"})
+    void deveRecusarDimensoesInvalidasInformadasPorCodecSemDecodificarPixels(int largura, int altura) throws Exception {
+        byte[] png = imagem("png");
+        var leitor = mock(javax.imageio.ImageReader.class);
+        when(leitor.getFormatName()).thenReturn("png");
+        when(leitor.getWidth(0)).thenReturn(largura);
+        when(leitor.getHeight(0)).thenReturn(altura);
+        try (var codecs = mockStatic(ImageIO.class, CALLS_REAL_METHODS)) {
+            codecs.when(() -> ImageIO.getImageReaders(any())).thenReturn(java.util.List.of(leitor).iterator());
+            var erro = assertThrows(FotografiaInvalidaException.class,
+                    () -> validador.validar(arquivo("image/png", png)));
+            assertTrue(erro.getMessage().contains("dimensões"));
+            verify(leitor, never()).read(0);
+            verify(leitor).dispose();
+        }
+    }
+
+    @Test
+    void deveTratarCodecQueNaoProduzImagemELiberarSeuRecurso() throws Exception {
+        byte[] png = imagem("png");
+        var leitor = mock(javax.imageio.ImageReader.class);
+        when(leitor.getFormatName()).thenReturn("png");
+        when(leitor.getWidth(0)).thenReturn(10);
+        when(leitor.getHeight(0)).thenReturn(8);
+        try (var codecs = mockStatic(ImageIO.class, CALLS_REAL_METHODS)) {
+            codecs.when(() -> ImageIO.getImageReaders(any())).thenReturn(java.util.List.of(leitor).iterator());
+            var erro = assertThrows(FotografiaInvalidaException.class,
+                    () -> validador.validar(arquivo("image/png", png)));
+            assertTrue(erro.getMessage().contains("preparar"));
+            verify(leitor).dispose();
+        }
     }
 
     private MockMultipartFile arquivo(String tipo, byte[] conteudo) {
